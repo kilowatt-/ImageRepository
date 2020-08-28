@@ -2,7 +2,7 @@ package main
 
 import (
 	"github.com/kilowatt-/ImageRepository/config"
-	"github.com/kilowatt-/ImageRepository/controller"
+	"github.com/kilowatt-/ImageRepository/database"
 	"github.com/kilowatt-/ImageRepository/routes"
 	"log"
 	"net/http"
@@ -15,10 +15,12 @@ func main() {
 	routes.RegisterRoutes()
 
 	if loadErr := config.InitializeEnvironmentVariables(); loadErr != nil {
-		panic("No .env file found; exiting")
+		log.Fatal(loadErr)
 	}
 
-	_ = controller.ConnectToDB()
+	if dbConnErr := database.Connect(); dbConnErr != nil {
+		log.Fatal(dbConnErr)
+	}
 
 	PORT, portExists := os.LookupEnv("GO_PORT")
 
@@ -28,9 +30,11 @@ func main() {
 
 	log.Println("Listening on port " + PORT)
 
-	err := http.ListenAndServe(":" + PORT, nil)
+	if err := http.ListenAndServe(":" + PORT, nil); err != nil {
+		log.Fatal(err)
+	}
 
-	if err != nil {
+	if err := database.Disconnect(); err != nil {
 		log.Fatal(err)
 	}
 }

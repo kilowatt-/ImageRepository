@@ -1,0 +1,74 @@
+package database
+
+import (
+	"context"
+	"errors"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+	"log"
+	"os"
+)
+
+var client *mongo.Client
+var dbName string
+
+func InsertOne(collectionName string, object interface{}) (string, error) {
+	if client != nil {
+		collection := client.Database(dbName).Collection(collectionName)
+
+		result, err := collection.InsertOne(context.TODO(), object)
+
+		if err != nil {
+			return "", err
+		}
+
+		return result.InsertedID.(primitive.ObjectID).String(), err
+	}
+
+	return "", errors.New("client not initialized yet")
+}
+
+func Disconnect() error {
+	if client != nil {
+		if err := client.Disconnect(context.TODO()); err != nil {
+			return err
+		}
+
+		log.Println("Connection to MongoDB closed")
+	}
+	return nil
+}
+
+func Connect() error {
+	mongoURI, uriExists := os.LookupEnv("MONGODB_URI")
+
+	if !uriExists {
+		return errors.New("MongoDB URI not declared; exiting")
+	}
+
+	var dbNameExists bool
+
+	dbName, dbNameExists = os.LookupEnv("MONGODB_DATABASE_NAME")
+	if !dbNameExists {
+		return errors.New("MongoDB database name not declared; exiting")
+	}
+
+	clientOptions := options.Client().ApplyURI(mongoURI)
+
+	var connErr error = nil
+
+	client, connErr = mongo.Connect(context.TODO(), clientOptions)
+
+	if connErr != nil {
+		return connErr
+	}
+
+	if pingErr := client.Ping(context.TODO(), nil); pingErr != nil {
+		return pingErr
+	}
+
+	log.Println("Connected to MongoDB!")
+
+	return nil
+}
