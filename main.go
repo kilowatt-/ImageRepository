@@ -1,18 +1,31 @@
 package main
 
 import (
+	"github.com/joho/godotenv"
 	"github.com/kilowatt-/ImageRepository/routes"
 	"log"
 	"net/http"
+	"os"
 )
 
-func main() {
+const DEFAULTPORT = "3000"
 
+func main() {
 	routes.RegisterRoutes()
 
-	log.Println("Listening on port 7000")
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found!")
+	}
 
-	err := http.ListenAndServe(":7000", nil)
+	PORT, portExists := os.LookupEnv("GO_PORT")
+
+	if !portExists {
+		PORT = DEFAULTPORT
+	}
+
+	log.Println("Listening on port " + PORT)
+
+	err := http.ListenAndServe(":" + PORT, nil)
 
 	if err != nil {
 		log.Fatal(err)
