@@ -1,7 +1,8 @@
 package main
 
 import (
-	"github.com/joho/godotenv"
+	"github.com/kilowatt-/ImageRepository/config"
+	"github.com/kilowatt-/ImageRepository/controller"
 	"github.com/kilowatt-/ImageRepository/routes"
 	"log"
 	"net/http"
@@ -13,9 +14,11 @@ const DEFAULTPORT = "3000"
 func main() {
 	routes.RegisterRoutes()
 
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found!")
+	if loadErr := config.InitializeEnvironmentVariables(); loadErr != nil {
+		panic("No .env file found; exiting")
 	}
+
+	_ = controller.ConnectToDB()
 
 	PORT, portExists := os.LookupEnv("GO_PORT")
 
