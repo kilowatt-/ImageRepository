@@ -2,12 +2,12 @@ package routes
 
 import "net/http"
 
-func serveStatic() {
-	fs := http.FileServer(http.Dir("./static"))
+func serveFrontEnd() {
+	fs := http.FileServer(http.Dir("./client/build"))
 	http.Handle("/", fs)
 }
 
 func RegisterRoutes() {
-	serveStatic()
+	serveFrontEnd()
 }
 
