@@ -8,6 +8,7 @@ func serveFrontEnd() {
 }
 
 func RegisterRoutes() {
+	serveUserRoutes()
 	serveFrontEnd()
 }
 
