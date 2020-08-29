@@ -17,7 +17,7 @@ func InsertOne(collectionName string, object interface{}) (string, error) {
 	if client != nil {
 		collection := client.Database(dbName).Collection(collectionName)
 
-		result, err := collection.InsertOne(context.TODO(), object)
+		result, err := collection.InsertOne(context.Background(), object)
 
 		if err != nil {
 			return "", err
