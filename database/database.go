@@ -24,7 +24,7 @@ func InsertOne(collectionName string, object interface{}) (string, error) {
 			return "", err
 		}
 
-		return result.InsertedID.(primitive.ObjectID).String(), err
+		return result.InsertedID.(primitive.ObjectID).Hex(), err
 	}
 
 	return "", errors.New("MongoDB client not initialized yet")

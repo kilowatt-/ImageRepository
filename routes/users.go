@@ -3,19 +3,23 @@ package routes
 
 import (
 	"errors"
+	"github.com/dgrijalva/jwt-go"
 	"github.com/kilowatt-/ImageRepository/database"
 	"github.com/kilowatt-/ImageRepository/model"
 	"go.mongodb.org/mongo-driver/bson"
 	"golang.org/x/crypto/bcrypt"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 
 const UserNotFound = "user not found"
 const PasswordNotMatching = "password does not match"
+const JWTKeyNotFound = "jwt key not found"
 
 type createUserResponse struct {
 	id string
@@ -33,23 +37,26 @@ func createUser(user model.User, channel chan createUserResponse) {
 	channel <- createUserResponse{id, err}
 }
 
+/**
+	Gets user from database based on email and password.
+
+	If user is not found, an error will be returned.
+ */
 func getUser(email string, password string, channel chan findUserResponse) {
 	filter := bson.D{{"email",  email}}
+
+	blankUser := model.User{
+		Name:     "",
+		Email:    "",
+		Password: nil,
+	}
 
 	response, err := database.FindOne("users", filter)
 
 	if err != nil {
-		channel <- findUserResponse{model.User{
-			Name:     "",
-			Email:    "",
-			Password: nil,
-		}, err}
+		channel <- findUserResponse{user: blankUser, err: err}
 	} else if len(response) == 0 {
-		channel <- findUserResponse{user: model.User{
-			Name:     "",
-			Email:    "",
-			Password: nil,
-		}, err: errors.New(UserNotFound)}
+		channel <- findUserResponse{user: blankUser, err: errors.New(UserNotFound)}
 	} else {
 		var user model.User
 
@@ -60,17 +67,46 @@ func getUser(email string, password string, channel chan findUserResponse) {
 		pwdErr := bcrypt.CompareHashAndPassword(user.Password, []byte(password))
 
 		if pwdErr != nil {
-			channel <- findUserResponse{user: model.User{
-				Name:     "",
-				Email:    "",
-				Password: nil,
-			}, err: errors.New(PasswordNotMatching)}
+			channel <- findUserResponse{user: blankUser, err: errors.New(PasswordNotMatching)}
 		} else {
 			channel <- findUserResponse{user, nil}
 		}
 	}
 }
 
+/**
+	Creates a login token that is a JWT. Expires 1 hour after creation.
+
+	Returns the signed token, expiry date, and error.
+ */
+func createLoginToken(user model.User) (string, time.Time, error) {
+	secretKey, keyExists := os.LookupEnv("JWT_KEY")
+
+	if !keyExists {
+		return "", time.Now(), errors.New(JWTKeyNotFound)
+	}
+
+	now := time.Now()
+	expiry := now.Add(time.Hour * 1)
+
+	claims := jwt.MapClaims{}
+
+	claims["authorized"] = true
+	claims["id"] = user.ID
+	claims["email"] = user.Email
+	claims["name"] = user.Name
+	claims["loginTime"] = now.Unix()
+	claims["expiry"] = expiry.Unix()
+
+	unsignedJwt := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
+	token, err := unsignedJwt.SignedString([]byte(secretKey))
+
+	if err != nil {
+		return "", time.Now(), err
+	}
+
+	return token, expiry, nil
+}
 
 func verifyJWT(jwt string) bool {
 	return false
@@ -188,8 +224,18 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 			}
 		} else {
-			log.Println("OK")
-			w.WriteHeader(http.StatusOK)
+			token, expiry, jwtErr := createLoginToken(res.user)
+
+			if jwtErr != nil {
+				log.Println(jwtErr)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			} else {
+				http.SetCookie(w, &http.Cookie{
+					Name: "logintoken",
+					Value: token,
+					Expires: expiry,
+				})
+			}
 		}
 
 	default:
