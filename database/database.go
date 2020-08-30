@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"errors"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -26,7 +27,28 @@ func InsertOne(collectionName string, object interface{}) (string, error) {
 		return result.InsertedID.(primitive.ObjectID).String(), err
 	}
 
-	return "", errors.New("client not initialized yet")
+	return "", errors.New("MongoDB client not initialized yet")
+}
+
+func FindOne(collectionName string, filter bson.D) (bson.M, error) {
+	if client != nil {
+		var result bson.M
+
+		collection := client.Database(dbName).Collection(collectionName)
+
+		if err := collection.FindOne(context.Background(), filter).Decode(&result); err != nil {
+			if err == mongo.ErrNoDocuments {
+				return nil, nil
+			} else {
+				return nil, err
+			}
+		}
+
+		return result, nil
+
+	}
+
+	return nil, errors.New("MongoDB client not initialized yet")
 }
 
 func Disconnect() error {

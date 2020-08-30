@@ -1,8 +1,11 @@
 package routes
 
+
 import (
+	"errors"
 	"github.com/kilowatt-/ImageRepository/database"
 	"github.com/kilowatt-/ImageRepository/model"
+	"go.mongodb.org/mongo-driver/bson"
 	"golang.org/x/crypto/bcrypt"
 	"log"
 	"net/http"
@@ -10,15 +13,62 @@ import (
 	"strings"
 )
 
-type userResponse struct {
+
+const UserNotFound = "user not found"
+const PasswordNotMatching = "password does not match"
+
+type createUserResponse struct {
 	id string
 	err error
 }
 
-func createUser(user model.User, errChan chan userResponse) {
+type findUserResponse struct {
+	user model.User
+	err error
+}
+
+func createUser(user model.User, channel chan createUserResponse) {
 	id, err := database.InsertOne("users", user)
 
-	errChan <- userResponse{id, err}
+	channel <- createUserResponse{id, err}
+}
+
+func getUser(email string, password string, channel chan findUserResponse) {
+	filter := bson.D{{"email",  email}}
+
+	response, err := database.FindOne("users", filter)
+
+	if err != nil {
+		channel <- findUserResponse{model.User{
+			Name:     "",
+			Email:    "",
+			Password: nil,
+		}, err}
+	} else if len(response) == 0 {
+		channel <- findUserResponse{user: model.User{
+			Name:     "",
+			Email:    "",
+			Password: nil,
+		}, err: errors.New(UserNotFound)}
+	} else {
+		var user model.User
+
+		bsonBytes, _ := bson.Marshal(response)
+
+		_ = bson.Unmarshal(bsonBytes, &user)
+
+		pwdErr := bcrypt.CompareHashAndPassword(user.Password, []byte(password))
+
+		if pwdErr != nil {
+			channel <- findUserResponse{user: model.User{
+				Name:     "",
+				Email:    "",
+				Password: nil,
+			}, err: errors.New(PasswordNotMatching)}
+		} else {
+			channel <- findUserResponse{user, nil}
+		}
+	}
 }
 
 
@@ -61,9 +111,6 @@ func verifyPassword(password string) bool {
 	return hasDigit && hasUppercase && hasLowerCase
 }
 
-
-
-
 func handleSignUp(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
@@ -87,7 +134,7 @@ func handleSignUp(w http.ResponseWriter, r *http.Request) {
 
 		hashed, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 
-		urChannel := make(chan userResponse)
+		urChannel := make(chan createUserResponse)
 		go createUser(
 			model.User{Name: name, Email: email, Password: hashed},
 			urChannel,
@@ -121,6 +168,30 @@ func handleSignUp(w http.ResponseWriter, r *http.Request) {
 func handleLogin(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
+		if parseFormErr := r.ParseForm(); parseFormErr != nil {
+			http.Error(w, "Sent invalid form", 400)
+		}
+
+		email := r.FormValue("email")
+		password := r.FormValue("password")
+
+		channel := make(chan findUserResponse)
+		go getUser(email, password, channel)
+
+		res := <- channel
+
+		if res.err != nil {
+			if res.err.Error() == UserNotFound || res.err.Error() == PasswordNotMatching {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte("Provided email/password do not match"))
+			} else {
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			}
+		} else {
+			log.Println("OK")
+			w.WriteHeader(http.StatusOK)
+		}
+
 	default:
 		http.Error(w, "Only POST requests are supported on this endpoint", http.StatusNotFound)
 	}
