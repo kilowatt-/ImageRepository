@@ -92,7 +92,7 @@ const Login = () => {
             try {
                 const response = axios.post(`${API_CONFIG.base_url}/users/login`, qs.stringify(body), config);
             } catch (err) {
-                console.log(err);
+                console.error(err);
             }
         }
 
