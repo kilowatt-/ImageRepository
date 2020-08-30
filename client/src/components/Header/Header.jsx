@@ -22,6 +22,7 @@ const Header = () => {
                 <Toolbar>
                     <Typography variant={"h5"} className={classes.title}>Image Repository</Typography>
                     <Button color={"inherit"} href={"/login"}>Login</Button>
+                    <Button color={"inherit"} href={"/signup"}>Sign up</Button>
                 </Toolbar>
             </AppBar>
         </div>
