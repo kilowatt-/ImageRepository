@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"github.com/gorilla/mux"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,7 +10,6 @@ type spaHandler struct {
 	staticPath string
 	indexPath string
 }
-
 
 func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// get the absolute path to prevent directory traversal
@@ -43,17 +41,16 @@ func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	http.FileServer(http.Dir(h.staticPath)).ServeHTTP(w, r)
 }
 
-func serveFrontEnd(r *mux.Router) {
+func serveFrontEnd() {
 	spa := spaHandler{
 		staticPath: "./client/build",
 		indexPath:  "index.html",
 	}
-	r.PathPrefix("/").Handler(spa)
+	http.Handle("/", spa)
 }
 
 func RegisterRoutes() {
-	r := mux.NewRouter()
-	serveUserRoutes(r)
-	serveFrontEnd(r)
+	serveUserRoutes()
+	serveFrontEnd()
 }
 

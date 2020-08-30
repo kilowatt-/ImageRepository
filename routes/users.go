@@ -1,10 +1,8 @@
 package routes
 
-
 import (
 	"errors"
 	"github.com/dgrijalva/jwt-go"
-	"github.com/gorilla/mux"
 	"github.com/kilowatt-/ImageRepository/database"
 	"github.com/kilowatt-/ImageRepository/model"
 	"go.mongodb.org/mongo-driver/bson"
@@ -244,7 +242,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func serveUserRoutes(r *mux.Router) {
-	r.HandleFunc("/api/users/signup", handleSignUp)
-	r.HandleFunc("/api/users/login", handleLogin)
+func serveUserRoutes() {
+	http.HandleFunc("/api/users/signup", handleSignUp)
+	http.HandleFunc("/api/users/login", handleLogin)
 }
