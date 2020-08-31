@@ -14,7 +14,7 @@ function App() {
                   <Route path="/" component={Home} exact />
                   <Route path="/login" component={Login} />
                   <Route path="/signup" component={Signup} />
-                  <Route component={() => (<div><h1>404 Not Found</h1></div>)} />
+                  <Route status={404} component={() => (<div><h1>404 Not Found</h1></div>)} />
               </Switch>
           </UserContextProvider>
       </div>

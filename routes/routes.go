@@ -30,12 +30,19 @@ func serveSPA(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func serveCatchAllAPIRoutes(r *mux.Router) {
+	r.PathPrefix("/api").HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		http.Error(w, "Route not found", http.StatusNotFound)
+	})
+}
+
 func serveFrontEnd(r *mux.Router) {
 	r.PathPrefix("/").HandlerFunc(serveSPA)
 }
 
 func RegisterRoutes(r *mux.Router) {
 	serveUserRoutes(r)
+	serveCatchAllAPIRoutes(r)
 	serveFrontEnd(r)
 }
 

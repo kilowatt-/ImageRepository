@@ -17,19 +17,18 @@ import (
 	"time"
 )
 
-
 const UserNotFound = "user not found"
 const PasswordNotMatching = "password does not match"
 const JWTKeyNotFound = "jwt key not found"
 
 type createUserResponse struct {
-	id string
+	id  string
 	err error
 }
 
 type findUserResponse struct {
 	user model.User
-	err error
+	err  error
 }
 
 func createUser(user model.User, channel chan createUserResponse) {
@@ -39,12 +38,12 @@ func createUser(user model.User, channel chan createUserResponse) {
 }
 
 /**
-	Gets user from database based on email and password.
+Gets user from database based on email and password.
 
-	If user is not found, an error will be returned.
- */
+If user is not found, an error will be returned.
+*/
 func getUser(email string, password string, channel chan findUserResponse) {
-	filter := bson.D{{"email",  email}}
+	filter := bson.D{{"email", email}}
 
 	blankUser := model.User{
 		Name:     "",
@@ -76,10 +75,10 @@ func getUser(email string, password string, channel chan findUserResponse) {
 }
 
 /**
-	Creates a login token that is a JWT. Expires 1 hour after creation.
+Creates a login token that is a JWT. Expires 1 hour after creation.
 
-	Returns the signed token, expiry date, and error.
- */
+Returns the signed token, expiry date, and error.
+*/
 func createLoginToken(user model.User) (string, time.Time, error) {
 	secretKey, keyExists := os.LookupEnv("JWT_KEY")
 
@@ -119,12 +118,12 @@ func verifyEmail(email string) bool {
 }
 
 /**
-	Verifies if password meets the following criteria:
-	- At least 8 characters
-	- 1 Uppercase
-	- 1 Lowercase
-	- 1 Digit
- */
+Verifies if password meets the following criteria:
+- At least 8 characters
+- 1 Uppercase
+- 1 Lowercase
+- 1 Digit
+*/
 func verifyPassword(password string) bool {
 	hasDigit, hasUppercase, hasLowerCase := false, false, false
 	pwdLength := len(password)
@@ -133,7 +132,7 @@ func verifyPassword(password string) bool {
 		return false
 	}
 
-	for i:=0; i < pwdLength; i++ {
+	for i := 0; i < pwdLength; i++ {
 		character := password[i]
 
 		if character >= 'a' && character <= 'z' {
@@ -176,13 +175,13 @@ func handleSignUp(w http.ResponseWriter, r *http.Request) {
 			model.User{Name: name, Email: email, Password: hashed},
 			urChannel,
 		)
-		createdUser := <- urChannel
+		createdUser := <-urChannel
 
 		if createdUser.err != nil {
 			log.Println(createdUser.err)
 
 			if strings.Contains(createdUser.err.Error(), "E11000") {
-				http.Error(w, "Email " + email + " already registered", http.StatusConflict)
+				http.Error(w, "Email "+email+" already registered", http.StatusConflict)
 			} else {
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 			}
@@ -203,68 +202,60 @@ func handleSignUp(w http.ResponseWriter, r *http.Request) {
 }
 
 type loginResponse struct {
-	Token string `json:"token,omitempty"`
-	Expiry time.Time `json:"expiry,omitempty"`
-	User model.User `json:"user,omitempty"`
+	Token  string     `json:"token,omitempty"`
+	Expiry time.Time  `json:"expiry,omitempty"`
+	User   model.User `json:"user,omitempty"`
 }
 
 func handleLogin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	switch r.Method {
-	case "POST":
-		parseFormErr := r.ParseForm()
+	parseFormErr := r.ParseForm()
 
-		if parseFormErr != nil {
-			http.Error(w, "Sent invalid form", 400)
-		} else {
-			email := r.FormValue("email")
-			password := r.FormValue("password")
+	if parseFormErr != nil {
+		http.Error(w, "Sent invalid form", 400)
+	} else {
+		email := r.FormValue("email")
+		password := r.FormValue("password")
 
-			channel := make(chan findUserResponse)
-			go getUser(email, password, channel)
+		channel := make(chan findUserResponse)
+		go getUser(email, password, channel)
 
-			res := <- channel
+		res := <-channel
 
-			if res.err != nil {
-				if res.err.Error() == UserNotFound || res.err.Error() == PasswordNotMatching {
-					w.WriteHeader(http.StatusNotFound)
-					_, _ = w.Write([]byte("Provided email/password do not match"))
-				} else {
-					http.Error(w, "Internal server error", http.StatusInternalServerError)
-				}
+		if res.err != nil {
+			if res.err.Error() == UserNotFound || res.err.Error() == PasswordNotMatching {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte("Provided email/password do not match"))
 			} else {
-				token, expiry, jwtErr := createLoginToken(res.user)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			}
+		} else {
+			token, expiry, jwtErr := createLoginToken(res.user)
 
-				if jwtErr != nil {
-					log.Println(jwtErr)
+			if jwtErr != nil {
+				log.Println(jwtErr)
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			} else {
+				res.user.Password = nil
+				jsonResponse, jsonErr := json.Marshal(loginResponse{
+					Token:  token,
+					Expiry: expiry,
+					User:   res.user,
+				})
+
+				if jsonErr != nil {
+					log.Println(jsonErr)
 					http.Error(w, "Internal server error", http.StatusInternalServerError)
 				} else {
-					res.user.Password = nil
-					jsonResponse, jsonErr := json.Marshal(loginResponse{
-						Token: token,
-						Expiry: expiry,
-						User:   res.user,
-					})
-
-					if jsonErr != nil {
-						log.Println(jsonErr)
-						http.Error(w, "Internal server error", http.StatusInternalServerError)
-					} else {
-						w.WriteHeader(200)
-						w.Write(jsonResponse)
-					}
+					w.WriteHeader(200)
+					w.Write(jsonResponse)
 				}
 			}
 		}
-
-
-
-	default:
-		http.Error(w, "Only POST requests are supported on this endpoint", http.StatusNotFound)
 	}
 }
 
 func serveUserRoutes(r *mux.Router) {
-	r.HandleFunc("/api/users/signup", handleSignUp)
-	r.HandleFunc("/api/users/login", handleLogin)
+	r.HandleFunc("/api/users/signup", handleSignUp).Methods("POST")
+	r.HandleFunc("/api/users/login", handleLogin).Methods("POST")
 }
