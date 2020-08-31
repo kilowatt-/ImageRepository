@@ -11,4 +11,5 @@ type Image struct {
 	AccessLevel string
 	AccessListType string
 	AccessListIDs []string
+	Likes int
 }
