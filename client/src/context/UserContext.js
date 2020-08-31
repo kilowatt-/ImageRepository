@@ -8,6 +8,8 @@ const reducer = (state, action) => {
             return {...state, name: action.name}
         case 'setUser':
             return action.user;
+        case 'reset':
+            return initialState;
         default:
             return state;
     }

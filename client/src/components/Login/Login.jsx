@@ -125,7 +125,7 @@ const Login = () => {
                 if (err.response && err.response.data) {
                     setErrorMessage(err.response.data);
                 } else {
-                    setErrorMessage("Unknown error occured while logging in; try again later")
+                    setErrorMessage("Unknown error occurred while logging in; try again later")
                 }
                 setLoggingIn(false);
             }
