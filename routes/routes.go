@@ -6,47 +6,39 @@ import (
 	"path/filepath"
 )
 
-type spaHandler struct {
-	staticPath string
-	indexPath string
+func allowCookiesInHeader(w *http.ResponseWriter) {
+	allowedOrigins, _ := os.LookupEnv("ALLOWED_CORS_ORIGINS")
+
+	(*w).Header().Set("Access-Control-Allow-Origin",allowedOrigins)
+	(*w).Header().Set("Access-Control-Allow-Credentials", "true")
+	(*w).Header().Set("Access-Control-Allow-Headers", "Content-Type, Set-Cookie, *")
 }
 
-func (h spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// get the absolute path to prevent directory traversal
+func serveSPA(w http.ResponseWriter, r *http.Request) {
+	staticPath := "./client/build"
+	indexPath := "index.html"
+
 	path, err := filepath.Abs(r.URL.Path)
+
 	if err != nil {
-		// if we failed to get the absolute path respond with a 400 bad request
-		// and stop
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		http.Error(w, "Bad path sent", http.StatusBadRequest)
+	} else {
+		path = filepath.Join(staticPath, path)
+
+		_, err = os.Stat(path)
+
+		if os.IsNotExist(err) {
+			http.ServeFile(w, r, filepath.Join(staticPath, indexPath))
+		} else if err != nil {
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		} else {
+			http.FileServer(http.Dir(staticPath)).ServeHTTP(w, r)
+		}
 	}
-
-	// prepend the path with the path to the static directory
-	path = filepath.Join(h.staticPath, path)
-
-	// check whether a file exists at the given path
-	_, err = os.Stat(path)
-	if os.IsNotExist(err) {
-		// file does not exist, serve index.html
-		http.ServeFile(w, r, filepath.Join(h.staticPath, h.indexPath))
-		return
-	} else if err != nil {
-		// if we got an error (that wasn't that the file doesn't exist) stating the
-		// file, return a 500 internal server error and stop
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// otherwise, use http.FileServer to serve the static dir
-	http.FileServer(http.Dir(h.staticPath)).ServeHTTP(w, r)
 }
 
 func serveFrontEnd() {
-	spa := spaHandler{
-		staticPath: "./client/build",
-		indexPath:  "index.html",
-	}
-	http.Handle("/", spa)
+	http.HandleFunc("/", serveSPA)
 }
 
 func RegisterRoutes() {

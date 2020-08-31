@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"encoding/json"
 	"errors"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/kilowatt-/ImageRepository/database"
@@ -200,42 +201,63 @@ func handleSignUp(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type loginResponse struct {
+	Token string `json:"token,omitempty"`
+	Expiry time.Time `json:"expiry,omitempty"`
+	User model.User `json:"user,omitempty"`
+}
+
 func handleLogin(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	allowCookiesInHeader(&w);
 	switch r.Method {
 	case "POST":
-		if parseFormErr := r.ParseForm(); parseFormErr != nil {
+		parseFormErr := r.ParseForm()
+
+		if parseFormErr != nil {
 			http.Error(w, "Sent invalid form", 400)
-		}
-
-		email := r.FormValue("email")
-		password := r.FormValue("password")
-
-		channel := make(chan findUserResponse)
-		go getUser(email, password, channel)
-
-		res := <- channel
-
-		if res.err != nil {
-			if res.err.Error() == UserNotFound || res.err.Error() == PasswordNotMatching {
-				w.WriteHeader(http.StatusNotFound)
-				_, _ = w.Write([]byte("Provided email/password do not match"))
-			} else {
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
-			}
 		} else {
-			token, expiry, jwtErr := createLoginToken(res.user)
+			email := r.FormValue("email")
+			password := r.FormValue("password")
 
-			if jwtErr != nil {
-				log.Println(jwtErr)
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			channel := make(chan findUserResponse)
+			go getUser(email, password, channel)
+
+			res := <- channel
+
+			if res.err != nil {
+				if res.err.Error() == UserNotFound || res.err.Error() == PasswordNotMatching {
+					w.WriteHeader(http.StatusNotFound)
+					_, _ = w.Write([]byte("Provided email/password do not match"))
+				} else {
+					http.Error(w, "Internal server error", http.StatusInternalServerError)
+				}
 			} else {
-				http.SetCookie(w, &http.Cookie{
-					Name: "logintoken",
-					Value: token,
-					Expires: expiry,
-				})
+				token, expiry, jwtErr := createLoginToken(res.user)
+
+				if jwtErr != nil {
+					log.Println(jwtErr)
+					http.Error(w, "Internal server error", http.StatusInternalServerError)
+				} else {
+					res.user.Password = nil
+					jsonResponse, jsonErr := json.Marshal(loginResponse{
+						Token: token,
+						Expiry: expiry,
+						User:   res.user,
+					})
+
+					if jsonErr != nil {
+						log.Println(jsonErr)
+						http.Error(w, "Internal server error", http.StatusInternalServerError)
+					} else {
+						w.WriteHeader(200)
+						w.Write(jsonResponse)
+					}
+				}
 			}
 		}
+
+
 
 	default:
 		http.Error(w, "Only POST requests are supported on this endpoint", http.StatusNotFound)

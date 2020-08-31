@@ -10,10 +10,13 @@ import Typography from '@material-ui/core/Typography';
 import { makeStyles } from '@material-ui/core/styles';
 import Container from '@material-ui/core/Container';
 import {API_CONFIG} from "../../config/api";
-import UserContext from "../../context/UserContext";
 import CircularProgress from "@material-ui/core/CircularProgress";
 import * as qs from "querystring";
 import axios from 'axios';
+import { Redirect } from "react-router-dom";
+import {useUserContext} from "../../context/UserContext";
+import {Cookies} from "react-cookie";
+
 
 const useStyles = makeStyles((theme) => ({
     paper: {
@@ -39,7 +42,9 @@ const useStyles = makeStyles((theme) => ({
 }));
 
 const Login = () => {
-    const user = useContext(UserContext);
+    const cookies = new Cookies();
+
+    const [user, dispatch] = useUserContext();
 
     const [loggingIn, setLoggingIn] = useState(false);
     const [errorMessage, setErrorMessage] = useState("");
@@ -49,6 +54,7 @@ const Login = () => {
 
     const [emailError, setEmailError] = useState(false);
     const [passwordError, setPasswordError] = useState(false);
+    const [success, setSuccess] = useState(false);
 
     const handleEmailChange = (event) => {
         setEmail(event.target.value);
@@ -73,14 +79,25 @@ const Login = () => {
     const handleSubmit = async (event) => {
         event.preventDefault();
 
-        if (!loggingIn) {
+        if (password === "" || email === "") {
+            if (password === "" && email === "") {
+                setPasswordError(true);
+                setEmailError(true);
+                setErrorMessage("Enter an email and password.")
+            } else if (password === "") {
+                setPasswordError(true);
+                setErrorMessage("Enter a password.")
+            } else {
+                setEmailError(true);
+                setErrorMessage("Enter an email.")
+            }
+        } else if (!loggingIn) {
             setErrorMessage("");
             setLoggingIn(true);
 
             const config = {
                 headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    "Access-Control-Allow-Origin": "*"
+                    'Content-Type': 'application/x-www-form-urlencoded'
                 }
             }
 
@@ -90,9 +107,27 @@ const Login = () => {
             }
 
             try {
-                const response = axios.post(`${API_CONFIG.base_url}/users/login`, qs.stringify(body), config);
+                axios.defaults.withCredentials = true;
+                const response = await axios.post(`${API_CONFIG.base_url}/users/login`, qs.stringify(body), config);
+
+                const { token, expiry, user} = response.data;
+
+                const expiryDateParsed = new Date(Date.parse(expiry));
+
+                cookies.set("logintoken", token, {path: "/", expires: expiryDateParsed, httpOnly: true, secure: (process.env.NODE_ENV === 'production'), sameSite: "lax"});
+                cookies.set("userinfo", user, { path: "/", expires: expiryDateParsed, httpOnly: false, secure: false, sameSite: "none"});
+
+                dispatch({ type: 'setUser', user});
+                setLoggingIn(false);
+                setSuccess(true);
             } catch (err) {
-                console.error(err);
+                console.log(err);
+                if (err.response && err.response.data) {
+                    setErrorMessage(err.response.data);
+                } else {
+                    setErrorMessage("Unknown error occured while logging in; try again later")
+                }
+                setLoggingIn(false);
             }
         }
 
@@ -100,6 +135,11 @@ const Login = () => {
 
     const classes = useStyles();
 
+    if (user.name || success) {
+        return (
+            <Redirect to={"/"} />
+        )
+    }
     return (
         <Container component="main" maxWidth="xs">
             <CssBaseline />
