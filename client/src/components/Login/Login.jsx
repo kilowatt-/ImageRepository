@@ -15,6 +15,7 @@ import axios from 'axios';
 import {Link, Redirect} from "react-router-dom";
 import {useUserContext} from "../../context/UserContext";
 import {Cookies} from "react-cookie";
+import { Alert } from '@material-ui/lab';
 
 // Template from: https://material-ui.com/getting-started/templates/sign-in/
 
@@ -41,7 +42,8 @@ const useStyles = makeStyles((theme) => ({
     }
 }));
 
-const Login = () => {
+const Login = ({location}) => {
+
     const cookies = new Cookies();
 
     const [user, dispatch] = useUserContext();
@@ -55,6 +57,7 @@ const Login = () => {
     const [emailError, setEmailError] = useState(false);
     const [passwordError, setPasswordError] = useState(false);
     const [success, setSuccess] = useState(false);
+
 
     const handleEmailChange = (event) => {
         setEmail(event.target.value);
@@ -145,6 +148,7 @@ const Login = () => {
         <Container component="main" maxWidth="xs">
             <CssBaseline />
             <div className={classes.paper}>
+                {location.search === "?origin=signup" ? <Alert severity="success" variant={"filled"}>Signup successful! Log in with your credentials.</Alert> : null}
                 <Avatar className={classes.avatar}>
                     <LockOutlinedIcon />
                 </Avatar>

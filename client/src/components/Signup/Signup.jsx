@@ -16,6 +16,7 @@ import axios from 'axios';
 import {API_CONFIG} from "../../config/api";
 import * as qs from "querystring";
 import CircularProgress from "@material-ui/core/CircularProgress";
+import {useUserContext} from "../../context/UserContext";
 
 
 
@@ -48,6 +49,7 @@ const useStyles = makeStyles((theme) => ({
 
 const Signup = () => {
     const classes = useStyles();
+    const [user, dispatch] = useUserContext();
 
     const [success, setSuccess] = useState(false);
     const [passwordFirstLoad, setPasswordFirstLoad] = useState(true);
@@ -160,6 +162,12 @@ const Signup = () => {
         setPasswordLowercaseMet(lowerCase);
         setPasswordDigitMet(digit);
     }, [password, confirmPassword])
+
+    if (user.name) {
+        return (
+            <Redirect to={"/"}/>
+        )
+    }
 
     if (success) {
         return (
