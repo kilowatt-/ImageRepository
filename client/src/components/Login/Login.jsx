@@ -1,9 +1,8 @@
-import React, {useContext, useState} from 'react';
+import React, { useState } from 'react';
 import Avatar from '@material-ui/core/Avatar';
 import Button from '@material-ui/core/Button';
 import CssBaseline from '@material-ui/core/CssBaseline';
 import TextField from '@material-ui/core/TextField';
-import Link from '@material-ui/core/Link';
 import Grid from '@material-ui/core/Grid';
 import LockOutlinedIcon from '@material-ui/icons/LockOutlined';
 import Typography from '@material-ui/core/Typography';
@@ -13,10 +12,11 @@ import {API_CONFIG} from "../../config/api";
 import CircularProgress from "@material-ui/core/CircularProgress";
 import * as qs from "querystring";
 import axios from 'axios';
-import { Redirect } from "react-router-dom";
+import {Link, Redirect} from "react-router-dom";
 import {useUserContext} from "../../context/UserContext";
 import {Cookies} from "react-cookie";
 
+// Template from: https://material-ui.com/getting-started/templates/sign-in/
 
 const useStyles = makeStyles((theme) => ({
     paper: {
@@ -127,6 +127,7 @@ const Login = () => {
                 } else {
                     setErrorMessage("Unknown error occurred while logging in; try again later")
                 }
+            } finally {
                 setLoggingIn(false);
             }
         }
@@ -193,7 +194,7 @@ const Login = () => {
                     </Button>
                     <Grid container>
                         <Grid item>
-                            <Link href="/signup" variant="body2">
+                            <Link to="/signup">
                                 {"Don't have an account? Sign Up"}
                             </Link>
                         </Grid>
