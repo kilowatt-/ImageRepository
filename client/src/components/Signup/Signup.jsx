@@ -8,13 +8,14 @@ import LockOutlinedIcon from '@material-ui/icons/LockOutlined';
 import Typography from '@material-ui/core/Typography';
 import { makeStyles } from '@material-ui/core/styles';
 import Container from '@material-ui/core/Container';
-import {Link} from "react-router-dom";
+import {Link, Redirect} from "react-router-dom";
 import {List} from "@material-ui/core";
 import ListItem from "@material-ui/core/ListItem";
 import ListItemText from "@material-ui/core/ListItemText";
 import axios from 'axios';
 import {API_CONFIG} from "../../config/api";
 import * as qs from "querystring";
+import CircularProgress from "@material-ui/core/CircularProgress";
 
 
 
@@ -78,6 +79,7 @@ const Signup = () => {
                 setErrorMessage("One or more errors were found. Please check the form for details.")
             } else {
                 setSigningUp(true);
+                setErrorMessage("");
 
                 const config = {
                     headers: {
@@ -92,8 +94,7 @@ const Signup = () => {
                 }
 
                 try {
-                    const result = await axios.post(`${API_CONFIG.base_url}/users/signup`, qs.stringify(body), config);
-                    console.log(result);
+                    await axios.post(`${API_CONFIG.base_url}/users/signup`, qs.stringify(body), config);
                     setSuccess(true);
                 } catch (err) {
                     if (err.response && err.response.data) {
@@ -160,7 +161,11 @@ const Signup = () => {
         setPasswordDigitMet(digit);
     }, [password, confirmPassword])
 
-
+    if (success) {
+        return (
+            <Redirect to={"/login?origin=signup"} />
+        )
+    }
 
     return (
         <Container component="main" maxWidth="xs">
@@ -260,7 +265,7 @@ const Signup = () => {
                         className={classes.submit}
                         disabled={!validateNoErrors()}
                     >
-                        Sign Up
+                        {signingUp ? <CircularProgress color={"secondary"}/> : "Sign Up"}
                     </Button>
                     <Grid container justify="flex-end">
                         <Grid item>
