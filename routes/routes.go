@@ -1,18 +1,11 @@
 package routes
 
 import (
+	"github.com/gorilla/mux"
 	"net/http"
 	"os"
 	"path/filepath"
 )
-
-func allowCookiesInHeader(w *http.ResponseWriter) {
-	allowedOrigins, _ := os.LookupEnv("ALLOWED_CORS_ORIGINS")
-
-	(*w).Header().Set("Access-Control-Allow-Origin",allowedOrigins)
-	(*w).Header().Set("Access-Control-Allow-Credentials", "true")
-	(*w).Header().Set("Access-Control-Allow-Headers", "Content-Type, Set-Cookie, *")
-}
 
 func serveSPA(w http.ResponseWriter, r *http.Request) {
 	staticPath := "./client/build"
@@ -37,12 +30,12 @@ func serveSPA(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func serveFrontEnd() {
-	http.HandleFunc("/", serveSPA)
+func serveFrontEnd(r *mux.Router) {
+	r.HandleFunc("/", serveSPA)
 }
 
-func RegisterRoutes() {
-	serveUserRoutes()
-	serveFrontEnd()
+func RegisterRoutes(r *mux.Router) {
+	serveUserRoutes(r)
+	serveFrontEnd(r)
 }
 

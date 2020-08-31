@@ -1,9 +1,11 @@
 package main
 
 import (
+	"github.com/gorilla/mux"
 	"github.com/kilowatt-/ImageRepository/config"
 	"github.com/kilowatt-/ImageRepository/database"
 	"github.com/kilowatt-/ImageRepository/routes"
+	"github.com/rs/cors"
 	"log"
 	"net/http"
 	"os"
@@ -12,7 +14,10 @@ import (
 const DEFAULTPORT = "3000"
 
 func main() {
-	routes.RegisterRoutes()
+
+	r := mux.NewRouter()
+
+	routes.RegisterRoutes(r)
 
 	if loadErr := config.InitializeEnvironmentVariables(); loadErr != nil {
 		log.Fatal(loadErr)
@@ -28,9 +33,22 @@ func main() {
 		PORT = DEFAULTPORT
 	}
 
+	corsOrigins, corsExists := os.LookupEnv("ALLOWED_CORS_ORIGINS")
+
+	if !corsExists {
+		log.Println("You are initializing the server without any allowed CORS origins. CORS requests will not work!")
+	}
+
+	// Initialize CORS with options
+	c := cors.New(cors.Options{
+		AllowedOrigins: []string{corsOrigins},
+		AllowCredentials: true,
+		AllowedHeaders: []string{"Content-Type, Set-Cookie, *"},
+	})
+
 	log.Println("Listening on port " + PORT)
 
-	if err := http.ListenAndServe(":" + PORT, nil); err != nil {
+	if err := http.ListenAndServe(":" + PORT, c.Handler(r)); err != nil {
 		log.Fatal(err)
 	}
 

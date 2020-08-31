@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/dgrijalva/jwt-go"
+	"github.com/gorilla/mux"
 	"github.com/kilowatt-/ImageRepository/database"
 	"github.com/kilowatt-/ImageRepository/model"
 	"go.mongodb.org/mongo-driver/bson"
@@ -209,7 +210,6 @@ type loginResponse struct {
 
 func handleLogin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	allowCookiesInHeader(&w);
 	switch r.Method {
 	case "POST":
 		parseFormErr := r.ParseForm()
@@ -264,7 +264,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func serveUserRoutes() {
-	http.HandleFunc("/api/users/signup", handleSignUp)
-	http.HandleFunc("/api/users/login", handleLogin)
+func serveUserRoutes(r *mux.Router) {
+	r.HandleFunc("/api/users/signup", handleSignUp)
+	r.HandleFunc("/api/users/login", handleLogin)
 }
