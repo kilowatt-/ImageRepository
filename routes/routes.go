@@ -31,7 +31,7 @@ func serveSPA(w http.ResponseWriter, r *http.Request) {
 }
 
 func serveFrontEnd(r *mux.Router) {
-	r.HandleFunc("/", serveSPA)
+	r.PathPrefix("/").HandlerFunc(serveSPA)
 }
 
 func RegisterRoutes(r *mux.Router) {
