@@ -1,11 +1,11 @@
 package main
 
 import (
+	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/kilowatt-/ImageRepository/config"
 	"github.com/kilowatt-/ImageRepository/database"
 	"github.com/kilowatt-/ImageRepository/routes"
-	"github.com/rs/cors"
 	"log"
 	"net/http"
 	"os"
@@ -39,16 +39,15 @@ func main() {
 		log.Println("You are initializing the server without any allowed CORS origins. CORS requests will not work!")
 	}
 
-	// Initialize CORS with options
-	c := cors.New(cors.Options{
-		AllowedOrigins: []string{corsOrigins},
-		AllowCredentials: true,
-		AllowedHeaders: []string{"Content-Type, Set-Cookie, *"},
-	})
+
+	allowedOrigins := handlers.AllowedOrigins([]string{corsOrigins})
+	allowedCredentials := handlers.AllowCredentials()
+	allowedHeaders := handlers.AllowedHeaders([]string{"Content-Type, Set-Cookie, *"})
+
 
 	log.Println("Listening on port " + PORT)
 
-	if err := http.ListenAndServe(":" + PORT, c.Handler(r)); err != nil {
+	if err := http.ListenAndServe(":" + PORT, handlers.CORS(allowedOrigins, allowedCredentials, allowedHeaders)(r)); err != nil {
 		log.Fatal(err)
 	}
 
