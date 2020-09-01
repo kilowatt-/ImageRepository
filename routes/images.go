@@ -3,7 +3,6 @@ package routes
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
@@ -26,7 +25,7 @@ func insertImage(image model.Image, channel chan database.InsertResponse) {
 }
 
 func validateImageIsAccepted(base64 string) bool {
-
+	return false
 }
 
 func addNewImage(w http.ResponseWriter, r *http.Request) {
@@ -54,7 +53,6 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 			if insertResponse.Err != nil {
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 			} else {
-				id := insertResponse.ID
 
 
 			}
