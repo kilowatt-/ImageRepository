@@ -19,7 +19,6 @@ import (
 const UserNotFound = "user not found"
 const PasswordNotMatching = "password does not match"
 
-
 type createUserResponse struct {
 	id  string
 	err error
@@ -109,57 +108,52 @@ func verifyPassword(password string) bool {
 }
 
 func handleSignUp(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case "POST":
-		if parseFormErr := r.ParseForm(); parseFormErr != nil {
-			http.Error(w, "Sent invalid form", 400)
-		}
-
-		name := r.FormValue("name")
-		email := r.FormValue("email")
-		password := r.FormValue("password")
-
-		if !verifyEmail(email) {
-			http.Error(w, "Invalid email", http.StatusBadRequest)
-			return
-		}
-
-		if !verifyPassword(password) {
-			http.Error(w, "Password does not meet complexity requirements", http.StatusBadRequest)
-			return
-		}
-
-		hashed, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-
-		urChannel := make(chan createUserResponse)
-		go createUser(
-			model.User{Name: name, Email: email, Password: hashed},
-			urChannel,
-		)
-		createdUser := <-urChannel
-
-		if createdUser.err != nil {
-			log.Println(createdUser.err)
-
-			if strings.Contains(createdUser.err.Error(), "E11000") {
-				http.Error(w, "Email "+email+" already registered", http.StatusConflict)
-			} else {
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
-			}
-
-		} else {
-			log.Println("Created user with ID " + createdUser.id)
-			w.WriteHeader(http.StatusOK)
-			_, wError := w.Write([]byte("Created user with ID " + createdUser.id))
-
-			if wError != nil {
-				log.Println("Error while writing: " + wError.Error())
-			}
-		}
-
-	default:
-		http.Error(w, "Only POST requests are supported on this endpoint", http.StatusNotFound)
+	if parseFormErr := r.ParseForm(); parseFormErr != nil {
+		http.Error(w, "Sent invalid form", 400)
 	}
+
+	name := r.FormValue("name")
+	email := r.FormValue("email")
+	password := r.FormValue("password")
+
+	if !verifyEmail(email) {
+		http.Error(w, "Invalid email", http.StatusBadRequest)
+		return
+	}
+
+	if !verifyPassword(password) {
+		http.Error(w, "Password does not meet complexity requirements", http.StatusBadRequest)
+		return
+	}
+
+	hashed, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+
+	urChannel := make(chan createUserResponse)
+	go createUser(
+		model.User{Name: name, Email: email, Password: hashed},
+		urChannel,
+	)
+	createdUser := <-urChannel
+
+	if createdUser.err != nil {
+		log.Println(createdUser.err)
+
+		if strings.Contains(createdUser.err.Error(), "E11000") {
+			http.Error(w, "Email "+email+" already registered", http.StatusConflict)
+		} else {
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		}
+
+	} else {
+		log.Println("Created user with ID " + createdUser.id)
+		w.WriteHeader(http.StatusOK)
+		_, wError := w.Write([]byte("Created user with ID " + createdUser.id))
+
+		if wError != nil {
+			log.Println("Error while writing: " + wError.Error())
+		}
+	}
+
 }
 
 type loginResponse struct {

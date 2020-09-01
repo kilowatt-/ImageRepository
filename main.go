@@ -44,8 +44,6 @@ func main() {
 		PORT = DEFAULTPORT
 	}
 
-
-
 	r := mux.NewRouter()
 
 	routes.RegisterRoutes(r)
