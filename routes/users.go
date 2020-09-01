@@ -32,9 +32,9 @@ func createUser(user model.User, channel chan database.InsertResponse) {
 }
 
 /**
-Gets user from database based on email and password.
+	Gets user from database based on email and password.
 
-If user is not found, an error will be returned.
+	If user is not found, an error will be returned.
 */
 func getUser(email string, password string, channel chan findUserResponse) {
 	filter := bson.D{{"email", email}}
@@ -103,6 +103,15 @@ func verifyPassword(password string) bool {
 	return hasDigit && hasUppercase && hasLowerCase
 }
 
+/**
+	Handles sign up. Takes in a name, email and password, verifies the inputs, and creates the users.
+
+	Returns:
+	- 200: User was created. Returns ID.
+	- 400: If any complexity requirement was not met, or an invalid form was sent.
+	- 409: Conflict, if the user was already registered.
+	- 500: If there is an error on the server (Database error, etc).
+ */
 func handleSignUp(w http.ResponseWriter, r *http.Request) {
 	if parseFormErr := r.ParseForm(); parseFormErr != nil {
 		http.Error(w, "Sent invalid form", 400)
@@ -158,12 +167,20 @@ type loginResponse struct {
 	User   model.User `json:"user,omitempty"`
 }
 
+/**
+	Handles a login request.
+
+	Returns:
+	- 200: OK, if the username and password match. Will return a JWT along with the expiry date and userinfo.
+	- 404: If the user was not found, or the username and password don't match.
+	- 500: If there is an internal server error.
+ */
 func handleLogin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	parseFormErr := r.ParseForm()
 
 	if parseFormErr != nil {
-		http.Error(w, "Sent invalid form", 400)
+		http.Error(w, "Sent invalid form", http.StatusBadRequest)
 	} else {
 		email := r.FormValue("email")
 		password := r.FormValue("password")
