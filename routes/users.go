@@ -19,20 +19,16 @@ import (
 const UserNotFound = "user not found"
 const PasswordNotMatching = "password does not match"
 
-type createUserResponse struct {
-	id  string
-	err error
-}
 
 type findUserResponse struct {
 	user model.User
 	err  error
 }
 
-func createUser(user model.User, channel chan createUserResponse) {
-	id, err := database.InsertOne("users", user)
+func createUser(user model.User, channel chan database.InsertResponse) {
+	res := database.InsertOne("users", user)
 
-	channel <- createUserResponse{id, err}
+	channel <- res
 }
 
 /**
@@ -128,26 +124,26 @@ func handleSignUp(w http.ResponseWriter, r *http.Request) {
 
 	hashed, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 
-	urChannel := make(chan createUserResponse)
+	urChannel := make(chan database.InsertResponse)
 	go createUser(
 		model.User{Name: name, Email: email, Password: hashed},
 		urChannel,
 	)
 	createdUser := <-urChannel
 
-	if createdUser.err != nil {
-		log.Println(createdUser.err)
+	if createdUser.Err != nil {
+		log.Println(createdUser.Err)
 
-		if strings.Contains(createdUser.err.Error(), "E11000") {
+		if strings.Contains(createdUser.Err.Error(), "E11000") {
 			http.Error(w, "Email "+email+" already registered", http.StatusConflict)
 		} else {
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 		}
 
 	} else {
-		log.Println("Created user with ID " + createdUser.id)
+		log.Println("Created user with ID " + createdUser.ID)
 		w.WriteHeader(http.StatusOK)
-		_, wError := w.Write([]byte("Created user with ID " + createdUser.id))
+		_, wError := w.Write([]byte("Created user with ID " + createdUser.ID))
 
 		if wError != nil {
 			log.Println("Error while writing: " + wError.Error())

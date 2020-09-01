@@ -17,6 +17,8 @@ import (
 
 const DEFAULTPORT = "3000"
 const JWTKeyNotFound = "jwt key not found"
+const AWSKeyNotFound = "AWS key not found"
+const AWSSecretKeyNotFound = "AWS secret key not found"
 
 func main() {
 
@@ -30,6 +32,19 @@ func main() {
 
 	if _, jwtKeyExists := os.LookupEnv("JWT_KEY"); !jwtKeyExists {
 		log.Fatal(JWTKeyNotFound)
+	}
+
+	if _, awsKeyExists := os.LookupEnv("AWS_ACCESS_KEY_ID"); !awsKeyExists {
+		log.Fatal(AWSKeyNotFound)
+	}
+
+	if _, awsSecretKeyExists := os.LookupEnv("AWS_SECRET_ACCESS_KEY"); !awsSecretKeyExists {
+		log.Fatal(AWSKeyNotFound)
+	}
+
+	if _, awsRegionExists := os.LookupEnv("AWS_REGION"); !awsRegionExists {
+		log.Println("AWS region not found; setting default to us-west-2")
+		_ = os.Setenv("AWS_REGION", "us-west-2")
 	}
 
 	corsOrigins, corsExists := os.LookupEnv("ALLOWED_CORS_ORIGINS");

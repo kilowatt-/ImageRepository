@@ -14,20 +14,25 @@ import (
 var client *mongo.Client
 var dbName string
 
-func InsertOne(collectionName string, object interface{}) (string, error) {
+type InsertResponse struct {
+	ID  string
+	Err error
+}
+
+func InsertOne(collectionName string, object interface{}) InsertResponse {
 	if client != nil {
 		collection := client.Database(dbName).Collection(collectionName)
 
 		result, err := collection.InsertOne(context.Background(), object)
 
 		if err != nil {
-			return "", err
+			return InsertResponse{"", err}
 		}
 
-		return result.InsertedID.(primitive.ObjectID).Hex(), err
+		return InsertResponse{result.InsertedID.(primitive.ObjectID).Hex(), err}
 	}
 
-	return "", errors.New("MongoDB client not initialized yet")
+	return InsertResponse{"", errors.New("MongoDB client not initialized yet")}
 }
 
 func FindOne(collectionName string, filter bson.D) (bson.M, error) {
