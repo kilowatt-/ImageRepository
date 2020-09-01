@@ -1,7 +1,6 @@
 package routes
 
 import (
-	"errors"
 	"github.com/dgrijalva/jwt-go"
 	"github.com/kilowatt-/ImageRepository/model"
 	"net/http"
@@ -9,8 +8,6 @@ import (
 	"strings"
 	"time"
 )
-
-const JWTKeyNotFound = "jwt key not found"
 
 
 /**
@@ -25,7 +22,10 @@ func verifyJWT(token string, secretKey string) (bool, error) {
 }
 
 /**
-	Middleware function.
+	Middleware function for JWTs. Validates incoming JWTs and returns 401 if they are unauthorized.
+
+	This is meant to be used with endpoints that REQUIRE a login; endpoints that might require a JWT for access to
+	protected resources require another function to be called.
  */
 func JWTMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -43,16 +43,12 @@ func JWTMiddleware(next http.Handler) http.Handler {
 }
 
 /**
-Creates a login token that is a JWT. Expires 1 hour after creation.
+	Creates a login token that is a JWT. Expires 1 hour after creation.
 
-Returns the signed token, expiry date, and error.
+	Returns the signed token, expiry date, and error.
 */
 func CreateLoginToken(user model.User) (string, time.Time, error) {
-	secretKey, keyExists := os.LookupEnv("JWT_KEY")
-
-	if !keyExists {
-		return "", time.Now(), errors.New(JWTKeyNotFound)
-	}
+	secretKey := os.Getenv("JWT_KEY")
 
 	now := time.Now()
 	expiry := now.Add(time.Hour * 1)

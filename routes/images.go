@@ -56,7 +56,6 @@ func getTopImages(w http.ResponseWriter, r *http.Request) {
 
 func serveImageRoutes(r *mux.Router) {
 
-
 	r.HandleFunc("/getImage/:id", getImage).Methods("GET")
 	r.HandleFunc("/getImagesFrom/:user", getImagesFromUser).Methods("GET")
 	r.HandleFunc("/getLatestImages", getLatestImages).Methods("GET")

@@ -16,6 +16,7 @@ import (
 )
 
 const DEFAULTPORT = "3000"
+const JWTKeyNotFound = "jwt key not found"
 
 func main() {
 
@@ -27,7 +28,11 @@ func main() {
 		log.Fatal(dbConnErr)
 	}
 
-	corsOrigins, corsExists := os.LookupEnv("ALLOWED_CORS_ORIGINS")
+	if _, jwtKeyExists := os.LookupEnv("JWT_KEY"); !jwtKeyExists {
+		log.Fatal(JWTKeyNotFound)
+	}
+
+	corsOrigins, corsExists := os.LookupEnv("ALLOWED_CORS_ORIGINS");
 
 	if !corsExists {
 		log.Println("You are initializing the server without any allowed CORS origins. CORS requests will not work!")
@@ -38,6 +43,8 @@ func main() {
 	if !portExists {
 		PORT = DEFAULTPORT
 	}
+
+
 
 	r := mux.NewRouter()
 
@@ -66,7 +73,6 @@ func main() {
 	var wait time.Duration
 	flag.DurationVar(&wait, "graceful-timeout", time.Second * 60, "time server waits for other services to finalise")
 	flag.Parse()
-
 
 	signal.Notify(c, os.Interrupt)
 
