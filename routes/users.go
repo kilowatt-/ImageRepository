@@ -3,15 +3,14 @@ package routes
 import (
 	"encoding/json"
 	"errors"
-	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
 	"github.com/kilowatt-/ImageRepository/database"
 	"github.com/kilowatt-/ImageRepository/model"
+	routes "github.com/kilowatt-/ImageRepository/routes/middleware"
 	"go.mongodb.org/mongo-driver/bson"
 	"golang.org/x/crypto/bcrypt"
 	"log"
 	"net/http"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -19,7 +18,7 @@ import (
 
 const UserNotFound = "user not found"
 const PasswordNotMatching = "password does not match"
-const JWTKeyNotFound = "jwt key not found"
+
 
 type createUserResponse struct {
 	id  string
@@ -72,44 +71,6 @@ func getUser(email string, password string, channel chan findUserResponse) {
 			channel <- findUserResponse{user, nil}
 		}
 	}
-}
-
-/**
-Creates a login token that is a JWT. Expires 1 hour after creation.
-
-Returns the signed token, expiry date, and error.
-*/
-func createLoginToken(user model.User) (string, time.Time, error) {
-	secretKey, keyExists := os.LookupEnv("JWT_KEY")
-
-	if !keyExists {
-		return "", time.Now(), errors.New(JWTKeyNotFound)
-	}
-
-	now := time.Now()
-	expiry := now.Add(time.Hour * 1)
-
-	claims := jwt.MapClaims{}
-
-	claims["authorized"] = true
-	claims["id"] = user.ID
-	claims["email"] = user.Email
-	claims["name"] = user.Name
-	claims["loginTime"] = now.Unix()
-	claims["expiry"] = expiry.Unix()
-
-	unsignedJwt := jwt.NewWithClaims(jwt.SigningMethodHS512, claims)
-	token, err := unsignedJwt.SignedString([]byte(secretKey))
-
-	if err != nil {
-		return "", time.Now(), err
-	}
-
-	return token, expiry, nil
-}
-
-func verifyJWT(jwt string) bool {
-	return false
 }
 
 func verifyEmail(email string) bool {
@@ -230,7 +191,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 			}
 		} else {
-			token, expiry, jwtErr := createLoginToken(res.user)
+			token, expiry, jwtErr := routes.CreateLoginToken(res.user)
 
 			if jwtErr != nil {
 				log.Println(jwtErr)
@@ -256,6 +217,6 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func serveUserRoutes(r *mux.Router) {
-	r.HandleFunc("/api/users/signup", handleSignUp).Methods("POST")
-	r.HandleFunc("/api/users/login", handleLogin).Methods("POST")
+	r.HandleFunc("/signup", handleSignUp).Methods("POST")
+	r.HandleFunc("/login", handleLogin).Methods("POST")
 }

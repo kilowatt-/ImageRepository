@@ -41,8 +41,8 @@ func serveFrontEnd(r *mux.Router) {
 }
 
 func RegisterRoutes(r *mux.Router) {
-	serveUserRoutes(r)
-	serveImageRoutes(r)
+	serveUserRoutes(r.PathPrefix("/api/users").Subrouter())
+	serveImageRoutes(r.PathPrefix("/api/images").Subrouter())
 	serveCatchAllAPIRoutes(r)
 	serveFrontEnd(r)
 }

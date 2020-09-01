@@ -2,6 +2,7 @@ package routes
 
 import (
 	"github.com/gorilla/mux"
+	routes "github.com/kilowatt-/ImageRepository/routes/middleware"
 	"net/http"
 )
 
@@ -54,16 +55,23 @@ func getTopImages(w http.ResponseWriter, r *http.Request) {
 }
 
 func serveImageRoutes(r *mux.Router) {
-	r.HandleFunc("/api/images/addImage", addNewImage).Methods("PUT")
-	r.HandleFunc("/api/images/deleteImage", deleteImage).Methods("DELETE")
-	r.HandleFunc("/api/images/editImageACL", editImageACL).Methods("PATCH")
-	r.HandleFunc("/api/images/likeImage", likeImage).Methods("PUT")
-	r.HandleFunc("/api/images/unlikeImage", unlikeImage).Methods("DELETE")
-	r.HandleFunc("/api/images/favouriteImage", favouriteImage).Methods("PUT")
-	r.HandleFunc("/api/images/unfavouriteImage", unfavouriteImage).Methods("DELETE")
-	r.HandleFunc("/api/images/getImage/:id", getImage).Methods("GET")
-	r.HandleFunc("/api/images/getImagesFrom/:user", getImagesFromUser).Methods("GET")
-	r.HandleFunc("/api/images/deleteAllImages", deleteAllImages).Methods("DELETE")
-	r.HandleFunc("/api/images/getLatestImages", getLatestImages).Methods("GET")
-	r.HandleFunc("/api/images/getTopImages", getTopImages).Methods("GET")
+
+
+	r.HandleFunc("/getImage/:id", getImage).Methods("GET")
+	r.HandleFunc("/getImagesFrom/:user", getImagesFromUser).Methods("GET")
+	r.HandleFunc("/getLatestImages", getLatestImages).Methods("GET")
+	r.HandleFunc("/getTopImages", getTopImages).Methods("GET")
+
+	s := r.Methods("PUT", "DELETE", "PATCH").Subrouter()
+
+	s.Use(routes.JWTMiddleware)
+
+	s.HandleFunc("/addImage", addNewImage).Methods("PUT")
+	s.HandleFunc("/deleteImage", deleteImage).Methods("DELETE")
+	s.HandleFunc("/editImageACL", editImageACL).Methods("PATCH")
+	s.HandleFunc("/likeImage", likeImage).Methods("PUT")
+	s.HandleFunc("/unlikeImage", unlikeImage).Methods("DELETE")
+	s.HandleFunc("/favouriteImage", favouriteImage).Methods("PUT")
+	s.HandleFunc("/unfavouriteImage", unfavouriteImage).Methods("DELETE")
+	s.HandleFunc("/deleteAllImages", deleteAllImages).Methods("DELETE")
 }

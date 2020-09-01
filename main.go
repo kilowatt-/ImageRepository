@@ -19,10 +19,6 @@ const DEFAULTPORT = "3000"
 
 func main() {
 
-	r := mux.NewRouter()
-
-	routes.RegisterRoutes(r)
-
 	if loadErr := config.InitializeEnvironmentVariables(); loadErr != nil {
 		log.Fatal(loadErr)
 	}
@@ -31,18 +27,21 @@ func main() {
 		log.Fatal(dbConnErr)
 	}
 
-	PORT, portExists := os.LookupEnv("GO_PORT")
-
-	if !portExists {
-		PORT = DEFAULTPORT
-	}
-
 	corsOrigins, corsExists := os.LookupEnv("ALLOWED_CORS_ORIGINS")
 
 	if !corsExists {
 		log.Println("You are initializing the server without any allowed CORS origins. CORS requests will not work!")
 	}
 
+	PORT, portExists := os.LookupEnv("GO_PORT")
+
+	if !portExists {
+		PORT = DEFAULTPORT
+	}
+
+	r := mux.NewRouter()
+
+	routes.RegisterRoutes(r)
 
 	allowedOrigins := handlers.AllowedOrigins([]string{corsOrigins})
 	allowedCredentials := handlers.AllowCredentials()
