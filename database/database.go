@@ -15,8 +15,8 @@ var client *mongo.Client
 var dbName string
 
 type InsertResponse struct {
-	ID  string
-	Err error
+	ID  string `json:"_id,omitempty" bson:"_id,omitempty"`
+	Err error	`json:"err,omitempty" bson:"err,omitempty"`
 }
 
 func InsertOne(collectionName string, object interface{}) InsertResponse {

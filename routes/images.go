@@ -2,7 +2,7 @@ package routes
 
 import (
 	"encoding/json"
-	"fmt"
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
@@ -19,42 +19,87 @@ var awsSession *session.Session = nil
 var s3Client *s3.S3 = nil
 var s3Uploader *s3manager.Uploader = nil
 
+var mimeset = map[string]bool{
+	"image/bmp": true,
+	"image/gif": true,
+	"image/jpeg": true,
+	"image/png": true,
+	"image/webp": true,
+}
+
 func insertImage(image model.Image, channel chan database.InsertResponse) {
 	res := database.InsertOne("images", image)
 	channel <- res
 }
 
-func validateImageIsAccepted(base64 string) bool {
-	return false
+func validateAcceptableMIMEType(mimeType string) bool {
+	return mimeset[mimeType]
 }
 
 func addNewImage(w http.ResponseWriter, r *http.Request) {
-	var image model.Image
 
-	err := json.NewDecoder(r.Body).Decode(&image)
-
-	if err != nil {
-		fmt.Println(err)
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	parseFormErr := r.ParseMultipartForm(10 << 20)
+	// Maximum total form data size: 10MB.
+	if parseFormErr != nil {
+		http.Error(w, parseFormErr.Error(), http.StatusBadRequest)
 	} else {
-		base64 := image.Base64
+		file, handler, formFileErr := r.FormFile("file")
 
-		if !validateImageIsAccepted(base64) {
-			http.Error(w, "Image format not accepted", http.StatusBadRequest)
+		if formFileErr != nil {
+			http.Error(w, formFileErr.Error(), http.StatusBadRequest)
 		} else {
-			image.Base64 = ""
+			mimeType := handler.Header
 
-			channel := make(chan database.InsertResponse)
-
-			go insertImage(image, channel)
-
-			insertResponse := <- channel
-
-			if insertResponse.Err != nil {
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			if !validateAcceptableMIMEType(mimeType.Get("Content-Type")) {
+				http.Error(w, "Uploaded non-image file type", http.StatusBadRequest)
 			} else {
+				authorID := r.FormValue("authorID")
+				accessLevel := r.FormValue("accessLevel")
+				accessListType := r.FormValue("accessListType")
+				accessListIDsString := r.FormValue("accessListIDs")
 
+				var accessListIDs []string
 
+				jsonParseErr := json.Unmarshal([]byte(accessListIDsString), &accessListIDs)
+
+				if jsonParseErr != nil {
+					http.Error(w, "passed invalid access list IDs array", http.StatusBadRequest)
+				} else {
+					image := model.Image{
+						AuthorID:       authorID,
+						AccessLevel:    accessLevel,
+						AccessListType: accessListType,
+						AccessListIDs:  accessListIDs,
+						Likes:          0,
+					}
+
+					channel := make(chan database.InsertResponse)
+
+					go insertImage(image, channel)
+
+					insertResponse := <- channel
+
+					if insertResponse.Err != nil {
+						http.Error(w, "Internal server error", http.StatusInternalServerError)
+					} else {
+						id := insertResponse.ID
+
+						_, uploadErr := s3Uploader.Upload(&s3manager.UploadInput{
+							Bucket: aws.String(bucketName),
+							Key: aws.String(id),
+							Body: file,
+						})
+
+						if uploadErr != nil {
+							http.Error(w, "Internal server error", http.StatusInternalServerError)
+						} else {
+							insertResponse.Err = nil;
+							w.WriteHeader(200)
+							jsonResponse, _ := json.Marshal(insertResponse)
+							_, _ = w.Write(jsonResponse)
+						}
+					}
+				}
 			}
 		}
 	}
