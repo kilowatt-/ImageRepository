@@ -17,6 +17,8 @@ import {API_CONFIG} from "../../config/api";
 import * as qs from "querystring";
 import CircularProgress from "@material-ui/core/CircularProgress";
 import {useUserContext} from "../../context/UserContext";
+import Cookies from "universal-cookie";
+
 
 
 
@@ -49,7 +51,19 @@ const useStyles = makeStyles((theme) => ({
 
 const Signup = () => {
     const classes = useStyles();
+    const cookies = new Cookies();
+
     const [user, dispatch] = useUserContext();
+
+    useEffect(() => {
+        if (!user.name) {
+            const cookieUser = cookies.get('userinfo');
+            if (cookieUser) {
+                dispatch({type: 'setUser', user: cookieUser});
+            }
+        }
+    }, [cookies, dispatch, user]);
+
 
     const [success, setSuccess] = useState(false);
     const [passwordFirstLoad, setPasswordFirstLoad] = useState(true);
@@ -277,7 +291,7 @@ const Signup = () => {
                     </Button>
                     <Grid container justify="flex-end">
                         <Grid item>
-                            <Link to="/login">
+                            <Link to="/login" replace>
                                 Already have an account? Log in
                             </Link>
                         </Grid>

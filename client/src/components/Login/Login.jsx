@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, {useEffect, useState} from 'react';
 import Avatar from '@material-ui/core/Avatar';
 import Button from '@material-ui/core/Button';
 import CssBaseline from '@material-ui/core/CssBaseline';
@@ -47,6 +47,16 @@ const Login = ({location}) => {
     const cookies = new Cookies();
 
     const [user, dispatch] = useUserContext();
+
+    useEffect(() => {
+        if (!user.name) {
+            const cookieUser = cookies.get('userinfo');
+            if (cookieUser) {
+                dispatch({type: 'setUser', user: cookieUser});
+            }
+        }
+    }, [cookies, dispatch, user]);
+
 
     const [loggingIn, setLoggingIn] = useState(false);
     const [errorMessage, setErrorMessage] = useState("");
@@ -198,7 +208,7 @@ const Login = ({location}) => {
                     </Button>
                     <Grid container>
                         <Grid item>
-                            <Link to="/signup">
+                            <Link to="/signup" replace>
                                 {"Don't have an account? Sign Up"}
                             </Link>
                         </Grid>

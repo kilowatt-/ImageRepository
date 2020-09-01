@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"flag"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	"github.com/kilowatt-/ImageRepository/config"
@@ -9,6 +11,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"time"
 )
 
 const DEFAULTPORT = "3000"
@@ -44,14 +48,42 @@ func main() {
 	allowedCredentials := handlers.AllowCredentials()
 	allowedHeaders := handlers.AllowedHeaders([]string{"Content-Type, Set-Cookie, *"})
 
+	srv := &http.Server{
+		Addr : ":" + PORT,
+		Handler: handlers.CORS(allowedOrigins, allowedCredentials, allowedHeaders)(r),
+	}
 
 	log.Println("Listening on port " + PORT)
 
-	if err := http.ListenAndServe(":" + PORT, handlers.CORS(allowedOrigins, allowedCredentials, allowedHeaders)(r)); err != nil {
-		log.Fatal(err)
-	}
+	go func() {
+		if err := srv.ListenAndServe(); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	// Graceful shutdown
+	c := make(chan os.Signal, 1)
+
+	var wait time.Duration
+	flag.DurationVar(&wait, "graceful-timeout", time.Second * 60, "time server waits for other services to finalise")
+	flag.Parse()
+
+
+	signal.Notify(c, os.Interrupt)
+
+	<-c
 
 	if err := database.Disconnect(); err != nil {
-		log.Fatal(err)
+		log.Println(err)
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
+
+	defer cancel()
+
+	_ = srv.Shutdown(ctx)
+
+	log.Println("Shutting down")
+
+	os.Exit(0)
 }
