@@ -42,7 +42,7 @@ const Header = () => {
         <div className={classes.root}>
             <AppBar position={"static"}>
                 <Toolbar>
-                    <Typography variant={"h5"} className={classes.title}>Ickstagram</Typography>
+                    <Typography variant={"h5"} className={classes.title}>Outstagram</Typography>
 
                     {!user.name ? (
                         <>

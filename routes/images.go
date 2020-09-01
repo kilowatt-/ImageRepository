@@ -46,7 +46,7 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 		file, handler, formFileErr := r.FormFile("file")
 
 		if formFileErr != nil {
-			http.Error(w, formFileErr.Error(), http.StatusBadRequest)
+			http.Error(w, "Error parsing file", http.StatusBadRequest)
 		} else {
 			mimeType := handler.Header
 
