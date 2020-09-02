@@ -11,8 +11,8 @@ import (
 	"github.com/kilowatt-/ImageRepository/database"
 	"github.com/kilowatt-/ImageRepository/model"
 	routes "github.com/kilowatt-/ImageRepository/routes/middleware"
+	"log"
 	"net/http"
-	"strings"
 )
 
 const bucketName = "imgrepository-cdn"
@@ -22,10 +22,10 @@ var s3Client *s3.S3 = nil
 var s3Uploader *s3manager.Uploader = nil
 
 var mimeset = map[string]bool{
-	"image/bmp": true,
-	"image/gif": true,
+	"image/bmp":  true,
+	"image/gif":  true,
 	"image/jpeg": true,
-	"image/png": true,
+	"image/png":  true,
 	"image/webp": true,
 }
 
@@ -39,10 +39,10 @@ func validateAcceptableMIMEType(mimeType string) bool {
 }
 
 func getUserIDFromToken(r *http.Request) string {
-	token := r.Header.Get("Authorization")
-	extractedToken := strings.Split(token, "Bearer ")
+	cookie, _ := r.Cookie("token")
+	token := cookie.Value
 
-	parsed, _, _ := new(jwt.Parser).ParseUnverified(strings.Join(extractedToken, ""), &jwt.MapClaims{})
+	parsed, _, _ := new(jwt.Parser).ParseUnverified(token, &jwt.MapClaims{})
 
 	claims := parsed.Claims.(*jwt.MapClaims)
 
@@ -76,41 +76,41 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 				jsonParseErr := json.Unmarshal([]byte(accessListIDsString), &accessListIDs)
 
 				if jsonParseErr != nil {
-					http.Error(w, "passed invalid access list IDs array", http.StatusBadRequest)
+					log.Println("passed empty access List IDs")
+					accessListIDs = []string{}
+				}
+				image := model.Image{
+					AuthorID:       authorID,
+					AccessLevel:    accessLevel,
+					AccessListType: accessListType,
+					AccessListIDs:  accessListIDs,
+					Likes:          0,
+				}
+
+				channel := make(chan database.InsertResponse)
+
+				go insertImage(image, channel)
+
+				insertResponse := <-channel
+
+				if insertResponse.Err != nil {
+					http.Error(w, "Internal server error", http.StatusInternalServerError)
 				} else {
-					image := model.Image{
-						AuthorID:       authorID,
-						AccessLevel:    accessLevel,
-						AccessListType: accessListType,
-						AccessListIDs:  accessListIDs,
-						Likes:          0,
-					}
+					id := insertResponse.ID
 
-					channel := make(chan database.InsertResponse)
+					_, uploadErr := s3Uploader.Upload(&s3manager.UploadInput{
+						Bucket: aws.String(bucketName),
+						Key:    aws.String(id),
+						Body:   file,
+					})
 
-					go insertImage(image, channel)
-
-					insertResponse := <- channel
-
-					if insertResponse.Err != nil {
+					if uploadErr != nil {
 						http.Error(w, "Internal server error", http.StatusInternalServerError)
 					} else {
-						id := insertResponse.ID
-
-						_, uploadErr := s3Uploader.Upload(&s3manager.UploadInput{
-							Bucket: aws.String(bucketName),
-							Key: aws.String(id),
-							Body: file,
-						})
-
-						if uploadErr != nil {
-							http.Error(w, "Internal server error", http.StatusInternalServerError)
-						} else {
-							insertResponse.Err = nil;
-							w.WriteHeader(200)
-							jsonResponse, _ := json.Marshal(insertResponse)
-							_, _ = w.Write(jsonResponse)
-						}
+						insertResponse.Err = nil
+						w.WriteHeader(200)
+						jsonResponse, _ := json.Marshal(insertResponse)
+						_, _ = w.Write(jsonResponse)
 					}
 				}
 			}
@@ -163,14 +163,13 @@ func getTopImages(w http.ResponseWriter, r *http.Request) {
 }
 
 /**
-	Initializes the AWS session, S3 Client and S3 Uploader.
- */
-func initAWS()  {
-	awsSession = session.Must(session.NewSessionWithOptions(session.Options{ SharedConfigState: session.SharedConfigEnable }))
+Initializes the AWS session, S3 Client and S3 Uploader.
+*/
+func initAWS() {
+	awsSession = session.Must(session.NewSessionWithOptions(session.Options{SharedConfigState: session.SharedConfigEnable}))
 	s3Client = s3.New(awsSession)
 	s3Uploader = s3manager.NewUploader(awsSession)
 }
-
 
 func serveImageRoutes(r *mux.Router) {
 	initAWS()

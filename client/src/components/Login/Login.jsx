@@ -16,6 +16,7 @@ import {Link, Redirect} from "react-router-dom";
 import {useUserContext} from "../../context/UserContext";
 import {Cookies} from "react-cookie";
 import { Alert } from '@material-ui/lab';
+import {getUserFromCookie} from "../../utils/getUserFromCookie";
 
 // Template from: https://material-ui.com/getting-started/templates/sign-in/
 
@@ -44,18 +45,13 @@ const useStyles = makeStyles((theme) => ({
 
 const Login = ({location}) => {
 
-    const cookies = new Cookies();
-
     const [user, dispatch] = useUserContext();
 
     useEffect(() => {
         if (!user.name) {
-            const cookieUser = cookies.get('userinfo');
-            if (cookieUser) {
-                dispatch({type: 'setUser', user: cookieUser});
-            }
+          getUserFromCookie(dispatch);
         }
-    }, [cookies, dispatch, user]);
+    }, [dispatch, user]);
 
 
     const [loggingIn, setLoggingIn] = useState(false);
@@ -123,12 +119,9 @@ const Login = ({location}) => {
                 axios.defaults.withCredentials = true;
                 const response = await axios.post(`${API_CONFIG.base_url}/users/login`, qs.stringify(body), config);
 
-                const { token, expiry, user} = response.data;
+                const user = response.data;
 
-                const expiryDateParsed = new Date(Date.parse(expiry));
-
-                cookies.set("logintoken", token, {path: "/", expires: expiryDateParsed, httpOnly: true, secure: (process.env.NODE_ENV === 'production'), sameSite: "lax"});
-                cookies.set("userinfo", user, { path: "/", expires: expiryDateParsed, httpOnly: false, secure: false, sameSite: "none"});
+                console.log(user);
 
                 dispatch({ type: 'setUser', user});
                 setLoggingIn(false);

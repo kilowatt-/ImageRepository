@@ -5,7 +5,7 @@ import Toolbar from "@material-ui/core/Toolbar";
 import {makeStyles} from "@material-ui/core/styles";
 import {Link} from "react-router-dom";
 import {useUserContext} from "../../context/UserContext";
-import Cookies from "universal-cookie";
+import {getUserFromCookie, resetCookie} from "../../utils/getUserFromCookie";
 
 const useStyles = makeStyles(() => ({
     root: {
@@ -18,24 +18,17 @@ const useStyles = makeStyles(() => ({
 
 const Header = () => {
     const [user, dispatch] = useUserContext();
-    const cookies = new Cookies();
-
 
     useEffect(() => {
         if (!user.name) {
-            const cookieUser = cookies.get('userinfo');
-            if (cookieUser) {
-                dispatch({type: 'setUser', user: cookieUser});
-            }
+            getUserFromCookie(dispatch);
         }
-    }, [cookies, dispatch, user]);
+    }, [dispatch, user]);
 
     const classes = useStyles();
 
     const handleLogout = () => {
-        cookies.remove('userinfo');
-        cookies.remove('logintoken');
-        dispatch({type: 'reset'});
+        resetCookie(dispatch);
     }
 
     return (

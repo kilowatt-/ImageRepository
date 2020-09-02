@@ -155,7 +155,7 @@ func handleSignUp(w http.ResponseWriter, r *http.Request) {
 		log.Println(createdUser.Err)
 
 		if strings.Contains(createdUser.Err.Error(), "E11000") {
-			if (strings.Contains(createdUser.Err.Error(), "index: userHandle_1")) {
+			if strings.Contains(createdUser.Err.Error(), "index: userHandle_1") {
 				http.Error(w, "Userhandle "+userHandle+" already registered", http.StatusConflict)
 			} else {
 				http.Error(w, "Email "+email+" already registered", http.StatusConflict)
@@ -220,16 +220,38 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 			} else {
 				res.user.Password = nil
-				jsonResponse, jsonErr := json.Marshal(loginResponse{
-					Token:  token,
-					Expiry: expiry,
-					User:   res.user,
-				})
+				jsonResponse, jsonErr := json.Marshal(res.user)
+
 
 				if jsonErr != nil {
 					log.Println(jsonErr)
 					http.Error(w, "Internal server error", http.StatusInternalServerError)
 				} else {
+
+					jsonEncodedCookie := strings.ReplaceAll(string(jsonResponse), "\"", "'") // Have to do this to Set-Cookie with JSON.
+
+					http.SetCookie(w, &http.Cookie{
+						Name:       "token",
+						Value:      token,
+						Path:       "/",
+						Expires:    expiry,
+						RawExpires: expiry.String(),
+						Secure:     false,
+						HttpOnly:   true,
+						SameSite:   0,
+					})
+
+					http.SetCookie(w, &http.Cookie{
+						Name:       "userinfo",
+						Value:      jsonEncodedCookie,
+						Path:       "/",
+						Expires:    expiry,
+						RawExpires: expiry.String(),
+						Secure:     false,
+						HttpOnly:   false,
+						SameSite:   0,
+					})
+
 					w.WriteHeader(200)
 					w.Write(jsonResponse)
 				}

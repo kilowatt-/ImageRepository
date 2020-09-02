@@ -66,10 +66,11 @@ func main() {
 	allowedOrigins := handlers.AllowedOrigins([]string{corsOrigins})
 	allowedCredentials := handlers.AllowCredentials()
 	allowedHeaders := handlers.AllowedHeaders([]string{"Content-Type, Set-Cookie, *"})
+	allowedMethods := handlers.AllowedMethods([]string{"GET", "HEAD", "POST", "PUT", "OPTIONS", "DELETE"})
 
 	srv := &http.Server{
 		Addr : ":" + PORT,
-		Handler: handlers.CORS(allowedOrigins, allowedCredentials, allowedHeaders)(r),
+		Handler: handlers.CORS(allowedOrigins, allowedCredentials, allowedHeaders, allowedMethods)(r),
 	}
 
 	log.Println("Listening on port " + PORT)

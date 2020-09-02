@@ -7,9 +7,9 @@ import (
 	"github.com/kilowatt-/ImageRepository/model"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"log"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -59,10 +59,17 @@ func verifyJWT(token string, secretKey string) (bool, error) {
  */
 func JWTMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := r.Header.Get("Authorization")
-		extractedToken := strings.Split(token, "Bearer ")
+		cookie, cErr := r.Cookie("token")
 
-		valid, _ := verifyJWT(strings.Join(extractedToken, ""), os.Getenv("JWT_KEY"))
+		if cErr != nil  {
+			log.Println(cErr)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+
+		token := cookie.Value
+
+		valid, _ := verifyJWT(token, os.Getenv("JWT_KEY"))
 
 		if !valid {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)

@@ -18,6 +18,7 @@ import * as qs from "querystring";
 import CircularProgress from "@material-ui/core/CircularProgress";
 import {useUserContext} from "../../context/UserContext";
 import Cookies from "universal-cookie";
+import {getUserFromCookie} from "../../utils/getUserFromCookie";
 
 
 
@@ -51,18 +52,14 @@ const useStyles = makeStyles((theme) => ({
 
 const Signup = () => {
     const classes = useStyles();
-    const cookies = new Cookies();
 
     const [user, dispatch] = useUserContext();
 
     useEffect(() => {
         if (!user.name) {
-            const cookieUser = cookies.get('userinfo');
-            if (cookieUser) {
-                dispatch({type: 'setUser', user: cookieUser});
-            }
+            getUserFromCookie(dispatch);
         }
-    }, [cookies, dispatch, user]);
+    }, [dispatch, user]);
 
 
     const [success, setSuccess] = useState(false);
