@@ -72,9 +72,11 @@ const Signup = () => {
     const [password, setPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [email, setEmail] = useState("");
+    const [userHandle, setUserHandle] = useState("");
 
     const [nameError, setNameError] = useState(false);
     const [emailError, setEmailError] = useState(false);
+    const [userHandleError, setUserHandleError] = useState(false);
 
     const [passwordsMatch, setPasswordsMatch] = useState(true);
     const [passwordCharLimitMet, setPasswordCharLimitMet] = useState(false);
@@ -105,6 +107,7 @@ const Signup = () => {
 
                 const body = {
                     name,
+                    userHandle,
                     email,
                     password,
                 }
@@ -136,7 +139,7 @@ const Signup = () => {
     }
 
     const validateNoErrors = () => {
-        return !nameError && name !== '' && email !== '' && !emailError && passwordsMatch && passwordCharLimitMet && passwordUppercaseMet && passwordDigitMet
+        return !userHandleError && !nameError && name !== '' && email !== '' && !emailError && passwordsMatch && passwordCharLimitMet && passwordUppercaseMet && passwordDigitMet
     }
 
     const handleEmailChange = (e) => {
@@ -156,6 +159,13 @@ const Signup = () => {
             setPassword(event.target.value);
         }
     }
+
+    const handleUserhandleChange = (event) => {
+        setUserHandle(event.target.value);
+        const regex = /^[a-z0-9]+$/i;
+        setUserHandleError(!regex.test(event.target.value));
+    }
+
 
     useEffect(() => {
         setPasswordsMatch(password === confirmPassword);
@@ -232,6 +242,21 @@ const Signup = () => {
                                 onChange={handleEmailChange}
                             />
                         </Grid>
+                        <Grid item xs={12}>
+                            <TextField
+                                value={userHandle}
+                                variant="outlined"
+                                helperText={(userHandleError) ? "Please enter a valid user handle. Only alphanumeric characters are accepted." : ""}
+                                required
+                                fullWidth
+                                id="userHandle"
+                                label="Userhandle"
+                                name="userhandle"
+                                error={userHandleError}
+                                onChange={handleUserhandleChange}
+                            />
+                        </Grid>
+
                         <Grid item xs={12}>
                             <TextField
                                 value={password}

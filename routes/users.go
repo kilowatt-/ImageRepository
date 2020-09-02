@@ -74,6 +74,11 @@ func verifyEmail(email string) bool {
 	return err == nil && matched
 }
 
+func verifyUserHandle(userHandle string) bool {
+	matched, err := regexp.MatchString("^[a-zA-Z0-9]+$", userHandle)
+	return err == nil && matched
+}
+
 /**
 Verifies if password meets the following criteria:
 - At least 8 characters
@@ -119,8 +124,13 @@ func handleSignUp(w http.ResponseWriter, r *http.Request) {
 	}
 
 	name := r.FormValue("name")
+	userHandle := r.FormValue("userHandle")
 	email := r.FormValue("email")
 	password := r.FormValue("password")
+
+	if !verifyUserHandle(userHandle) {
+		http.Error(w, "Invalid userhandle", http.StatusBadRequest)
+	}
 
 	if !verifyEmail(email) {
 		http.Error(w, "Invalid email", http.StatusBadRequest)
@@ -136,7 +146,7 @@ func handleSignUp(w http.ResponseWriter, r *http.Request) {
 
 	urChannel := make(chan database.InsertResponse)
 	go createUser(
-		model.User{Name: name, Email: email, Password: hashed},
+		model.User{Name: name, UserHandle: userHandle,Email: email, Password: hashed},
 		urChannel,
 	)
 	createdUser := <-urChannel
@@ -145,7 +155,11 @@ func handleSignUp(w http.ResponseWriter, r *http.Request) {
 		log.Println(createdUser.Err)
 
 		if strings.Contains(createdUser.Err.Error(), "E11000") {
-			http.Error(w, "Email "+email+" already registered", http.StatusConflict)
+			if (strings.Contains(createdUser.Err.Error(), "index: userHandle_1")) {
+				http.Error(w, "Userhandle "+userHandle+" already registered", http.StatusConflict)
+			} else {
+				http.Error(w, "Email "+email+" already registered", http.StatusConflict)
+			}
 		} else {
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 		}
