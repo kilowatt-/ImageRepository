@@ -8,6 +8,7 @@ import TextField from "@material-ui/core/TextField";
 import Grid from "@material-ui/core/Grid";
 import axios from "axios";
 import {API_CONFIG} from "../../config/api";
+import CircularProgress from "@material-ui/core/CircularProgress";
 
 const UploadModal = ({open, handleClose}) => {
     const fileInput = React.createRef();
@@ -17,7 +18,14 @@ const UploadModal = ({open, handleClose}) => {
     const [caption, setCaption] = useState("");
     const [uploading, setUploading] = useState(false);
 
+    const [successSnackBarOpen, setSuccessSnackBarOpen] = useState(false);
+    const [failureSnackBarOpen, setFailureSnackBarOpen] = useState(false);
+    const [failureSnackbarMessage, setFailureSnackbarMessage] = useState("");
+
+    const fileURL = (file) ? URL.createObjectURL(file) : null;
+
     const reset = () => {
+        setFailureSnackbarMessage("");
         setFile(null);
         setUploading(false);
         setCaption("");
@@ -40,7 +48,9 @@ const UploadModal = ({open, handleClose}) => {
 
         try {
             axios.defaults.withCredentials = true;
-            const response = await axios.put(`${API_CONFIG.base_url}/images/addImage`, formData, config);
+            await axios.put(`${API_CONFIG.base_url}/images/addImage`, formData, config);
+            handleClose();
+            reset();
         } catch (e) {
             console.log(e);
         } finally {
@@ -96,10 +106,13 @@ const UploadModal = ({open, handleClose}) => {
                     {file ?(
                     <>
                         <Grid item xs={12}>
+                            <img src={fileURL} />
+                        </Grid>
+                        <Grid item xs={12}>
                             <TextField fullWidth
                                        multiline
                                        id="caption"
-                                       label="caption"
+                                       label="Caption"
                                        variant="outlined"
                                        autoFocus
                                        value={caption}
@@ -112,7 +125,7 @@ const UploadModal = ({open, handleClose}) => {
                                 variant="contained"
                                 color="primary"
                                 disabled={uploading}
-                            >Submit</Button>
+                            >{uploading ? <CircularProgress color={"secondary"}/> : "Upload"}</Button>
                         </Grid>
                     </>) : null
                     }

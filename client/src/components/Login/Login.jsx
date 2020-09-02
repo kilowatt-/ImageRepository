@@ -121,8 +121,6 @@ const Login = ({location}) => {
 
                 const user = response.data;
 
-                console.log(user);
-
                 dispatch({ type: 'setUser', user});
                 setLoggingIn(false);
                 setSuccess(true);
