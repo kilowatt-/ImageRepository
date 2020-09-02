@@ -31,12 +31,13 @@ func createUser(user model.User, channel chan database.InsertResponse) {
 	channel <- res
 }
 
+
 /**
 	Gets user from database based on email and password.
 
 	If user is not found, an error will be returned.
 */
-func getUser(email string, password string, channel chan findUserResponse) {
+func getUserWithLogin(email string, password string, channel chan findUserResponse) {
 	filter := bson.D{{"email", email}}
 
 	blankUser := model.User{
@@ -186,7 +187,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		password := r.FormValue("password")
 
 		channel := make(chan findUserResponse)
-		go getUser(email, password, channel)
+		go getUserWithLogin(email, password, channel)
 
 		res := <-channel
 

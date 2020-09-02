@@ -6,11 +6,13 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gorilla/mux"
 	"github.com/kilowatt-/ImageRepository/database"
 	"github.com/kilowatt-/ImageRepository/model"
 	routes "github.com/kilowatt-/ImageRepository/routes/middleware"
 	"net/http"
+	"strings"
 )
 
 const bucketName = "imgrepository-cdn"
@@ -36,6 +38,17 @@ func validateAcceptableMIMEType(mimeType string) bool {
 	return mimeset[mimeType]
 }
 
+func getUserIDFromToken(r *http.Request) string {
+	token := r.Header.Get("Authorization")
+	extractedToken := strings.Split(token, "Bearer ")
+
+	parsed, _, _ := new(jwt.Parser).ParseUnverified(strings.Join(extractedToken, ""), &jwt.MapClaims{})
+
+	claims := parsed.Claims.(*jwt.MapClaims)
+
+	return (*claims)["id"].(string)
+}
+
 func addNewImage(w http.ResponseWriter, r *http.Request) {
 
 	parseFormErr := r.ParseMultipartForm(10 << 20)
@@ -53,7 +66,7 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 			if !validateAcceptableMIMEType(mimeType.Get("Content-Type")) {
 				http.Error(w, "Uploaded non-image file type", http.StatusBadRequest)
 			} else {
-				authorID := r.FormValue("authorID")
+				authorID := getUserIDFromToken(r)
 				accessLevel := r.FormValue("accessLevel")
 				accessListType := r.FormValue("accessListType")
 				accessListIDsString := r.FormValue("accessListIDs")

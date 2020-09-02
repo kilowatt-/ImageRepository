@@ -1,8 +1,12 @@
 package routes
 
 import (
+	"errors"
 	"github.com/dgrijalva/jwt-go"
+	"github.com/kilowatt-/ImageRepository/database"
 	"github.com/kilowatt-/ImageRepository/model"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"net/http"
 	"os"
 	"strings"
@@ -14,11 +18,37 @@ import (
 	Verifies if the given token is valid.
  */
 func verifyJWT(token string, secretKey string) (bool, error) {
-	t, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+	t, err := jwt.ParseWithClaims(token, &jwt.MapClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return []byte(secretKey), nil
 	})
 
-	return t.Valid, err
+	if t != nil  {
+		id :=  (*(t.Claims.(*jwt.MapClaims)))["id"].(string)
+
+		if id == "" {
+			return false, errors.New("no id in token")
+		}
+
+		primitiveID, hexErr := primitive.ObjectIDFromHex(id)
+
+		if hexErr != nil {
+			return false, hexErr
+		}
+
+		user, dbErr := database.FindOne("users", bson.D{{"_id", primitiveID}})
+
+		if dbErr != nil {
+			return false, err
+		}
+
+		if len(user) == 0 {
+			return false, errors.New("user not found")
+		}
+
+		return t.Valid, err
+	}
+
+	return false, errors.New("malformed token presented")
 }
 
 /**
