@@ -180,7 +180,7 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 					Caption:		caption,
 					UploadDate:		time.Now(),
 					AccessListIDs:  accessListIDs,
-					Likes:          0,
+					Likes:          []string{},
 				}
 
 				channel := make(chan *database.InsertResponse)
@@ -249,9 +249,6 @@ func deleteAllImages(w http.ResponseWriter, r *http.Request) {
  */
 func getImagesMetadata(w http.ResponseWriter, r *http.Request) {
 	filter, limit := buildImageQuery(r)
-
-	log.Println(filter)
-	log.Println(limit)
 
 	opts := &options.FindOptions{
 		Limit:               &limit,

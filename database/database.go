@@ -127,6 +127,24 @@ func InsertOne(collectionName string, object interface{}) *InsertResponse {
 	return &InsertResponse{"", errors.New("MongoDB client not initialized yet")}
 }
 
+func FindOneAndUpdate(collectionName string, filter bson.D, update bson.D) *FindOneResponse {
+	if client != nil {
+		collection := client.Database(dbName).Collection(collectionName)
+
+		var result bson.M
+
+		_ = collection.FindOneAndUpdate(context.Background(), filter, update).Decode(&result)
+
+		return &FindOneResponse{
+			Result: result,
+			Err: nil,
+		}
+	}
+
+	return &FindOneResponse{nil, errors.New("MongoDB client not initialized yet")}
+
+}
+
 func FindOne(collectionName string, filter bson.D, opts *options.FindOneOptions) *FindOneResponse {
 	if client != nil {
 		if opts == nil {
