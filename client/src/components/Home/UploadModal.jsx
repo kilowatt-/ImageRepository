@@ -12,24 +12,19 @@ import CircularProgress from "@material-ui/core/CircularProgress";
 
 const UploadModal = ({open, handleClose}) => {
     const fileInput = React.createRef();
-    const [errorText, setErrorText] = useState("");
+    const [errorMessage, setErrorMessage] = useState("");
 
     const [file, setFile] = useState(null);
     const [caption, setCaption] = useState("");
     const [uploading, setUploading] = useState(false);
 
-    const [successSnackBarOpen, setSuccessSnackBarOpen] = useState(false);
-    const [failureSnackBarOpen, setFailureSnackBarOpen] = useState(false);
-    const [failureSnackbarMessage, setFailureSnackbarMessage] = useState("");
-
     const fileURL = (file) ? URL.createObjectURL(file) : null;
 
     const reset = () => {
-        setFailureSnackbarMessage("");
         setFile(null);
         setUploading(false);
         setCaption("");
-        setErrorText("");
+        setErrorMessage("");
     }
 
     const handleSubmit = async (e) => {
@@ -49,10 +44,14 @@ const UploadModal = ({open, handleClose}) => {
         try {
             axios.defaults.withCredentials = true;
             await axios.put(`${API_CONFIG.base_url}/images/addImage`, formData, config);
-            handleClose();
+            handleClose(true);
             reset();
-        } catch (e) {
-            console.log(e);
+        } catch (err) {
+            if (err.response && err.response.data) {
+                setErrorMessage(err.response.data);
+            } else {
+                setErrorMessage("Unknown error occurred while uploading file")
+            }
         } finally {
             setUploading(false);
         }
@@ -62,11 +61,11 @@ const UploadModal = ({open, handleClose}) => {
         const file = fileInput.current.files[0];
         if (file) {
             if (file.size <= 9000000) {
-                setErrorText("");
+                setErrorMessage("");
                 setFile(fileInput.current.files[0]);
             } else {
                 setFile(null);
-                setErrorText("Selected image exceeds size limit (9MB)")
+                setErrorMessage("Selected image exceeds size limit (9MB)")
             }
         }
     }
@@ -78,12 +77,11 @@ const UploadModal = ({open, handleClose}) => {
                 <DialogContentText>Upload image</DialogContentText>
                 <form onSubmit={handleSubmit} noValidate>
 
-
                     {!file ?
                         (
                         <Grid item xs={12}>
                             <input
-                                accept="image/*"
+                                accept="image/gif, image/jpeg, image/bmp, image/gif, image/webp"
                                 style={{ display: 'none' }}
                                 id="image-upload"
                                 type="file"
@@ -129,7 +127,7 @@ const UploadModal = ({open, handleClose}) => {
                         </Grid>
                     </>) : null
                     }
-                        <p>{errorText}</p>
+                        <p>{errorMessage}</p>
 
                 </form>
             </DialogContent>

@@ -13,6 +13,7 @@ import (
 	routes "github.com/kilowatt-/ImageRepository/routes/middleware"
 	"log"
 	"net/http"
+	"time"
 )
 
 const bucketName = "imgrepository-cdn"
@@ -70,6 +71,7 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 				accessLevel := r.FormValue("accessLevel")
 				accessListType := r.FormValue("accessListType")
 				accessListIDsString := r.FormValue("accessListIDs")
+				caption := r.FormValue("caption")
 
 				var accessListIDs []string
 
@@ -82,6 +84,8 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 				image := model.Image{
 					AuthorID:       authorID,
 					AccessLevel:    accessLevel,
+					Caption:		caption,
+					UploadDate:		time.Now(),
 					AccessListType: accessListType,
 					AccessListIDs:  accessListIDs,
 					Likes:          0,
