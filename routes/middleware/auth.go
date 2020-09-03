@@ -17,7 +17,9 @@ import (
 /**
 	Verifies if the given token is valid.
  */
-func verifyJWT(token string, secretKey string) (bool, error) {
+func VerifyJWT(token string) (bool, error) {
+	secretKey := os.Getenv("JWT_KEY")
+
 	t, err := jwt.ParseWithClaims(token, &jwt.MapClaims{}, func(token *jwt.Token) (interface{}, error) {
 		return []byte(secretKey), nil
 	})
@@ -35,7 +37,7 @@ func verifyJWT(token string, secretKey string) (bool, error) {
 			return false, hexErr
 		}
 
-		user, dbErr := database.FindOne("users", bson.D{{"_id", primitiveID}})
+		user, dbErr := database.FindOne("users", bson.D{{"_id", primitiveID}}, nil)
 
 		if dbErr != nil {
 			return false, err
@@ -69,7 +71,7 @@ func JWTMiddleware(next http.Handler) http.Handler {
 
 		token := cookie.Value
 
-		valid, _ := verifyJWT(token, os.Getenv("JWT_KEY"))
+		valid, _ := VerifyJWT(token)
 
 		if !valid {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)

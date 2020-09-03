@@ -19,29 +19,109 @@ type InsertResponse struct {
 	Err error	`json:"err,omitempty" bson:"err,omitempty"`
 }
 
-func InsertOne(collectionName string, object interface{}) InsertResponse {
+type UpdateResponse struct {
+	Modified int64
+	Matched int64
+}
+
+func DeleteMany(collectionName string, filter bson.D) (int64, error) {
+	if client != nil {
+		collection := client.Database(dbName).Collection(collectionName)
+
+		result, err := collection.DeleteMany(context.Background(), filter)
+
+		if err != nil {
+			return -1, err
+		}
+
+		return result.DeletedCount, nil
+	}
+
+	return -1, errors.New("MongoDB client not initialized yet")
+
+}
+
+func DeleteOne(collectionName string, filter bson.D) (int64, error) {
+	if client != nil {
+		collection := client.Database(dbName).Collection(collectionName)
+
+		result, err := collection.DeleteOne(context.Background(), filter)
+
+		if err != nil {
+			return -1, err
+		}
+
+		return result.DeletedCount, nil
+	}
+
+	return -1, errors.New("MongoDB client not initialized yet")
+
+}
+
+func Update(collectionName string, filter bson.D, update bson.D) (*UpdateResponse, error) {
+	if client != nil {
+		collection := client.Database(dbName).Collection(collectionName)
+
+		result, err := collection.UpdateMany(context.Background(), filter, update)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return &UpdateResponse{
+			Modified: result.ModifiedCount,
+			Matched:  result.MatchedCount,
+		}, nil
+	}
+
+	return nil, errors.New("MongoDB client not initialized yet")
+}
+
+func UpdateOne(collectionName string, filter bson.D, update bson.D) (*UpdateResponse, error) {
+	if client != nil {
+		collection := client.Database(dbName).Collection(collectionName)
+
+		result, err := collection.UpdateOne(context.Background(), filter, update)
+
+		if err != nil {
+			return nil, err
+		}
+
+		return &UpdateResponse{
+			Modified: result.ModifiedCount,
+			Matched:  result.MatchedCount,
+		}, nil
+	}
+
+	return nil, errors.New("MongoDB client not initialized yet")
+}
+
+func InsertOne(collectionName string, object interface{}) *InsertResponse {
 	if client != nil {
 		collection := client.Database(dbName).Collection(collectionName)
 
 		result, err := collection.InsertOne(context.Background(), object)
 
 		if err != nil {
-			return InsertResponse{"", err}
+			return &InsertResponse{"", err}
 		}
 
-		return InsertResponse{result.InsertedID.(primitive.ObjectID).Hex(), err}
+		return &InsertResponse{result.InsertedID.(primitive.ObjectID).Hex(), err}
 	}
 
-	return InsertResponse{"", errors.New("MongoDB client not initialized yet")}
+	return &InsertResponse{"", errors.New("MongoDB client not initialized yet")}
 }
 
-func FindOne(collectionName string, filter bson.D) (bson.M, error) {
+func FindOne(collectionName string, filter bson.D, opts *options.FindOneOptions) (bson.M, error) {
 	if client != nil {
+		if opts == nil {
+			opts = &options.FindOneOptions{}
+		}
 		var result bson.M
 
 		collection := client.Database(dbName).Collection(collectionName)
 
-		if err := collection.FindOne(context.Background(), filter).Decode(&result); err != nil {
+		if err := collection.FindOne(context.Background(), filter, opts).Decode(&result); err != nil {
 			if err == mongo.ErrNoDocuments {
 				return nil, nil
 			} else {
@@ -50,7 +130,36 @@ func FindOne(collectionName string, filter bson.D) (bson.M, error) {
 		}
 
 		return result, nil
+	}
 
+	return nil, errors.New("MongoDB client not initialized yet")
+}
+
+func Find(collectionName string, filter bson.D, opts *options.FindOptions) ([]bson.M, error) {
+	if client != nil {
+		if opts == nil {
+			opts = &options.FindOptions{}
+		}
+
+		var result []bson.M
+
+		collection := client.Database(dbName).Collection(collectionName)
+
+		cursor, err := collection.Find(context.Background(), filter, opts)
+
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				return nil, nil
+			} else {
+				return nil, err
+			}
+		}
+
+		if err := cursor.All(context.Background(), &result); err != nil {
+			return nil, err
+		}
+
+		return result, nil
 	}
 
 	return nil, errors.New("MongoDB client not initialized yet")

@@ -30,7 +30,7 @@ const Home = () => {
         <div>
             <Header />
             <Container>
-                <Snackbar open={uploadSuccessSnackbarOpen} autoHideDuration={6000} onClose={handleCloseSnackbar}>
+                <Snackbar open={uploadSuccessSnackbarOpen} autoHideDuration={5000} onClose={handleCloseSnackbar}>
                     <Alert onClose={handleCloseSnackbar} variant="filled" severity="success">
                         Image uploaded successfully
                     </Alert>

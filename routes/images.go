@@ -11,6 +11,7 @@ import (
 	"github.com/kilowatt-/ImageRepository/database"
 	"github.com/kilowatt-/ImageRepository/model"
 	routes "github.com/kilowatt-/ImageRepository/routes/middleware"
+	"go.mongodb.org/mongo-driver/bson"
 	"log"
 	"net/http"
 	"time"
@@ -30,13 +31,33 @@ var mimeset = map[string]bool{
 	"image/webp": true,
 }
 
-func insertImage(image model.Image, channel chan database.InsertResponse) {
+func insertImage(image model.Image, channel chan *database.InsertResponse) {
 	res := database.InsertOne("images", image)
 	channel <- res
 }
 
 func validateAcceptableMIMEType(mimeType string) bool {
 	return mimeset[mimeType]
+}
+
+/**
+	Gets user ID from the token.
+
+	This is required for endpoints which might require a user ID, but are not checked by the middleware because they
+	are not strictly necessary. JWT Middleware is only run on functions where the user MUST be authenticated.
+ */
+func getUserIDFromTokenNotStrictValidation(r *http.Request) string {
+	cookie, err := r.Cookie("token")
+	if err == nil {
+		token := cookie.Value
+		valid, vErr := routes.VerifyJWT(token)
+
+		if valid && vErr == nil {
+			return getUserIDFromToken(r)
+		}
+	}
+
+	return ""
 }
 
 func getUserIDFromToken(r *http.Request) string {
@@ -51,7 +72,6 @@ func getUserIDFromToken(r *http.Request) string {
 }
 
 func addNewImage(w http.ResponseWriter, r *http.Request) {
-
 	parseFormErr := r.ParseMultipartForm(10 << 20)
 	// Maximum total form data size: 10MB.
 	if parseFormErr != nil {
@@ -91,7 +111,7 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 					Likes:          0,
 				}
 
-				channel := make(chan database.InsertResponse)
+				channel := make(chan *database.InsertResponse)
 
 				go insertImage(image, channel)
 
@@ -159,6 +179,17 @@ func deleteAllImages(w http.ResponseWriter, r *http.Request) {
 }
 
 func getLatestImages(w http.ResponseWriter, r *http.Request) {
+	userID := getUserIDFromTokenNotStrictValidation(r)
+
+	var filter bson.D
+
+	publicFilter := bson.D{{"accessLevel", "public"}}
+
+	if userID == "" {
+		filter = publicFilter
+	} else {
+
+	}
 
 }
 

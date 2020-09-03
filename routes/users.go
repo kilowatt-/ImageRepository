@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-	"time"
 )
 
 const UserNotFound = "user not found"
@@ -25,7 +24,7 @@ type findUserResponse struct {
 	err  error
 }
 
-func createUser(user model.User, channel chan database.InsertResponse) {
+func createUser(user model.User, channel chan *database.InsertResponse) {
 	res := database.InsertOne("users", user)
 
 	channel <- res
@@ -46,7 +45,7 @@ func getUserWithLogin(email string, password string, channel chan findUserRespon
 		Password: nil,
 	}
 
-	response, err := database.FindOne("users", filter)
+	response, err := database.FindOne("users", filter, nil)
 
 	if err != nil {
 		channel <- findUserResponse{user: blankUser, err: err}
@@ -144,7 +143,7 @@ func handleSignUp(w http.ResponseWriter, r *http.Request) {
 
 	hashed, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 
-	urChannel := make(chan database.InsertResponse)
+	urChannel := make(chan *database.InsertResponse)
 	go createUser(
 		model.User{Name: name, UserHandle: userHandle,Email: email, Password: hashed},
 		urChannel,
@@ -174,12 +173,6 @@ func handleSignUp(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-}
-
-type loginResponse struct {
-	Token  string     `json:"token,omitempty"`
-	Expiry time.Time  `json:"expiry,omitempty"`
-	User   model.User `json:"user,omitempty"`
 }
 
 /**
