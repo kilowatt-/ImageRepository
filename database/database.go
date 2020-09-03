@@ -142,7 +142,6 @@ func FindOneAndUpdate(collectionName string, filter bson.D, update bson.D) *Find
 	}
 
 	return &FindOneResponse{nil, errors.New("MongoDB client not initialized yet")}
-
 }
 
 func FindOne(collectionName string, filter bson.D, opts *options.FindOneOptions) *FindOneResponse {

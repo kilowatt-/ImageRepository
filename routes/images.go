@@ -25,6 +25,7 @@ const bucketName = "imgrepository-cdn"
 var awsSession *session.Session = nil
 var s3Client *s3.S3 = nil
 var s3Uploader *s3manager.Uploader = nil
+var s3Downloader *s3manager.Downloader = nil
 
 var mimeset = map[string]bool{
 	"image/bmp":  true,
@@ -292,6 +293,7 @@ func initAWS() {
 	awsSession = session.Must(session.NewSessionWithOptions(session.Options{SharedConfigState: session.SharedConfigEnable}))
 	s3Client = s3.New(awsSession)
 	s3Uploader = s3manager.NewUploader(awsSession)
+	s3Downloader = s3manager.NewDownloader(awsSession)
 }
 
 func serveImageRoutes(r *mux.Router) {
