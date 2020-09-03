@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 )
-
+func sendInternalServerError(w http.ResponseWriter) {
+	http.Error(w, "Internal server error", http.StatusInternalServerError)
+}
 func serveSPA(w http.ResponseWriter, r *http.Request) {
 	staticPath := "./client/build"
 	indexPath := "index.html"
@@ -23,7 +25,7 @@ func serveSPA(w http.ResponseWriter, r *http.Request) {
 		if os.IsNotExist(err) {
 			http.ServeFile(w, r, filepath.Join(staticPath, indexPath))
 		} else if err != nil {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			sendInternalServerError(w)
 		} else {
 			http.FileServer(http.Dir(staticPath)).ServeHTTP(w, r)
 		}

@@ -24,6 +24,21 @@ type UpdateResponse struct {
 	Matched int64
 }
 
+type FindOneResponse struct {
+	Result bson.M
+	Err error
+}
+
+type FindResponse struct {
+	Result []bson.M
+	Err error
+}
+
+type DeleteResponse struct {
+	NumberDeleted int64
+	Err error
+}
+
 func DeleteMany(collectionName string, filter bson.D) (int64, error) {
 	if client != nil {
 		collection := client.Database(dbName).Collection(collectionName)
@@ -112,7 +127,7 @@ func InsertOne(collectionName string, object interface{}) *InsertResponse {
 	return &InsertResponse{"", errors.New("MongoDB client not initialized yet")}
 }
 
-func FindOne(collectionName string, filter bson.D, opts *options.FindOneOptions) (bson.M, error) {
+func FindOne(collectionName string, filter bson.D, opts *options.FindOneOptions) *FindOneResponse {
 	if client != nil {
 		if opts == nil {
 			opts = &options.FindOneOptions{}
@@ -123,19 +138,19 @@ func FindOne(collectionName string, filter bson.D, opts *options.FindOneOptions)
 
 		if err := collection.FindOne(context.Background(), filter, opts).Decode(&result); err != nil {
 			if err == mongo.ErrNoDocuments {
-				return nil, nil
+				return &FindOneResponse{nil, nil}
 			} else {
-				return nil, err
+				return &FindOneResponse{bson.M{}, err}
 			}
 		}
 
-		return result, nil
+		return &FindOneResponse{result, nil}
 	}
 
-	return nil, errors.New("MongoDB client not initialized yet")
+	return &FindOneResponse{nil, errors.New("MongoDB client not initialized yet")}
 }
 
-func Find(collectionName string, filter bson.D, opts *options.FindOptions) ([]bson.M, error) {
+func Find(collectionName string, filter bson.D, opts *options.FindOptions) *FindResponse {
 	if client != nil {
 		if opts == nil {
 			opts = &options.FindOptions{}
@@ -149,20 +164,20 @@ func Find(collectionName string, filter bson.D, opts *options.FindOptions) ([]bs
 
 		if err != nil {
 			if err == mongo.ErrNoDocuments {
-				return nil, nil
+				return &FindResponse{result, nil}
 			} else {
-				return nil, err
+				return &FindResponse{nil, err}
 			}
 		}
 
 		if err := cursor.All(context.Background(), &result); err != nil {
-			return nil, err
+			return &FindResponse{nil, err}
 		}
 
-		return result, nil
+		return &FindResponse{result, nil}
 	}
 
-	return nil, errors.New("MongoDB client not initialized yet")
+	return &FindResponse{nil, errors.New("MongoDB client not initialized yet")}
 }
 
 func Disconnect() error {

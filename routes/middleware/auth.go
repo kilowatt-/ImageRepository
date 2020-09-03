@@ -37,13 +37,13 @@ func VerifyJWT(token string) (bool, error) {
 			return false, hexErr
 		}
 
-		user, dbErr := database.FindOne("users", bson.D{{"_id", primitiveID}}, nil)
+		findResponse := database.FindOne("users", bson.D{{"_id", primitiveID}}, nil)
 
-		if dbErr != nil {
+		if findResponse.Err != nil {
 			return false, err
 		}
 
-		if len(user) == 0 {
+		if len(findResponse.Result) == 0 {
 			return false, errors.New("user not found")
 		}
 

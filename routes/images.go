@@ -12,8 +12,11 @@ import (
 	"github.com/kilowatt-/ImageRepository/model"
 	routes "github.com/kilowatt-/ImageRepository/routes/middleware"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"log"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -36,8 +39,79 @@ func insertImage(image model.Image, channel chan *database.InsertResponse) {
 	channel <- res
 }
 
+func getFindOneImages(filter bson.D, opts *options.FindOneOptions, channel chan *database.FindOneResponse) {
+	res := database.FindOne("images", filter, opts)
+	channel <- res
+}
+
+func getFindImages(filter bson.D, opts *options.FindOptions, channel chan *database.FindResponse) {
+	res := database.Find("images", filter, opts)
+	channel <- res
+}
+
 func validateAcceptableMIMEType(mimeType string) bool {
 	return mimeset[mimeType]
+}
+
+/**
+Builds the image query based on the parameters passed in the request.
+
+Returns a BSON Document representing the database query to be built, and a number that represents the limit.
+*/
+func buildImageQuery(r *http.Request) (bson.D, int64) {
+	loggedInUser := getUserIDFromTokenNotStrictValidation(r)
+
+	before := time.Time{}
+	after := time.Time{}
+	var limit int64 = 10
+	user := ""
+
+	if beforeQuery, beforeOK := r.URL.Query()["before"]; beforeOK && len(beforeQuery) > 0 && len(beforeQuery[0]) > 0 {
+		if conv, convErr := strconv.ParseInt(beforeQuery[0], 10, 64); convErr == nil {
+			before = time.Unix(conv, 0)
+		}
+	}
+	if afterQuery, afterOK := r.URL.Query()["after"]; afterOK && len(afterQuery) > 0 && len(afterQuery[0]) > 0 {
+		if conv, convErr := strconv.ParseInt(afterQuery[0], 10, 64); convErr == nil {
+			after = time.Unix(conv, 0)
+		}
+	}
+	if limitQuery, limitOK := r.URL.Query()["limit"]; limitOK && len(limitQuery) > 0 && len(limitQuery[0]) > 0 {
+		if conv, convErr := strconv.ParseInt(limitQuery[0], 10, 64); convErr == nil {
+			limit = conv
+		}
+	}
+	if userQuery, userOK := r.URL.Query()["user"]; userOK && len(userQuery) > 0 && len(userQuery[0]) > 0 {
+		user = userQuery[0]
+	}
+
+	var subFilters []interface{}
+
+	if !before.IsZero() {
+		subFilters = append(subFilters, bson.D{{"uploadDateTime", bson.D{{"$lte", primitive.NewDateTimeFromTime(before)}}}})
+	}
+
+	if !after.IsZero() {
+		subFilters = append(subFilters, bson.D{{"uploadDateTime", bson.D{{"$gte", primitive.NewDateTimeFromTime(after)}}}})
+	}
+
+	visibilityFilters := []interface{}{bson.D{{"accessLevel", "public"}}}
+
+	if loggedInUser != "" {
+		visibilityFilters = append(visibilityFilters, bson.D{{"accessListIDs", loggedInUser}})
+		visibilityFilters = append(visibilityFilters, bson.D{{"authorid", loggedInUser}})
+	}
+
+	if user != "" {
+		subFilters = append(subFilters, bson.D{{"$and", []interface{}{
+			bson.D{{"$or", visibilityFilters}},
+			bson.D{{"authorid", user}},
+		}}})
+	} else {
+		subFilters = append(subFilters, bson.D{{"$or", visibilityFilters}})
+	}
+
+	return bson.D{{"$and", subFilters}}, limit
 }
 
 /**
@@ -89,7 +163,6 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 			} else {
 				authorID := getUserIDFromToken(r)
 				accessLevel := r.FormValue("accessLevel")
-				accessListType := r.FormValue("accessListType")
 				accessListIDsString := r.FormValue("accessListIDs")
 				caption := r.FormValue("caption")
 
@@ -106,7 +179,6 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 					AccessLevel:    accessLevel,
 					Caption:		caption,
 					UploadDate:		time.Now(),
-					AccessListType: accessListType,
 					AccessListIDs:  accessListIDs,
 					Likes:          0,
 				}
@@ -118,7 +190,7 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 				insertResponse := <-channel
 
 				if insertResponse.Err != nil {
-					http.Error(w, "Internal server error", http.StatusInternalServerError)
+					sendInternalServerError(w)
 				} else {
 					id := insertResponse.ID
 
@@ -129,7 +201,7 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 					})
 
 					if uploadErr != nil {
-						http.Error(w, "Internal server error", http.StatusInternalServerError)
+						sendInternalServerError(w)
 					} else {
 						insertResponse.Err = nil
 						w.WriteHeader(200)
@@ -140,10 +212,6 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-}
-
-func deleteImage(w http.ResponseWriter, r *http.Request) {
-
 }
 
 func editImageACL(w http.ResponseWriter, r *http.Request) {
@@ -158,19 +226,11 @@ func unlikeImage(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func favouriteImage(w http.ResponseWriter, r *http.Request) {
-
-}
-
-func unfavouriteImage(w http.ResponseWriter, r *http.Request) {
-
-}
-
 func getImage(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func getImagesFromUser(w http.ResponseWriter, r *http.Request) {
+func deleteImage(w http.ResponseWriter, r *http.Request) {
 
 }
 
@@ -178,23 +238,54 @@ func deleteAllImages(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func getLatestImages(w http.ResponseWriter, r *http.Request) {
-	userID := getUserIDFromTokenNotStrictValidation(r)
+/**
+	Gets the metadata (not the actual image files) of the images in the database based on the queries passed in, in chronologically descending order.
 
-	var filter bson.D
+	Accepted query parameters:
+		- before: UNIX time stamp representing the latest image that can be uploaded.
+		- after: UNIX time stamp repesenting the earliest image that should be fetched.
+		- limit: integer. the limit on the number of images to fetch. Default 10 if not specified.
+		- user: userID. Gets images from a particular user.
+ */
+func getImagesMetadata(w http.ResponseWriter, r *http.Request) {
+	filter, limit := buildImageQuery(r)
 
-	publicFilter := bson.D{{"accessLevel", "public"}}
+	log.Println(filter)
+	log.Println(limit)
 
-	if userID == "" {
-		filter = publicFilter
-	} else {
-
+	opts := &options.FindOptions{
+		Limit:               &limit,
+		Sort:                bson.D{{"uploadDateTime", -1}},
 	}
 
-}
+	channel := make(chan *database.FindResponse)
 
-func getTopImages(w http.ResponseWriter, r *http.Request) {
+	go getFindImages(filter, opts, channel)
 
+	res := <- channel
+
+	imageList := []model.Image{}
+
+	if res.Err != nil {
+		sendInternalServerError(w)
+		return
+	}
+
+	for i:=0; i < len(res.Result); i++ {
+		image := model.Image{}
+
+		bsonBytes, _ := bson.Marshal(res.Result[i])
+
+		_ = bson.Unmarshal(bsonBytes, &image)
+
+		imageList = append(imageList, image)
+	}
+
+	marshalled, _ := json.Marshal(imageList)
+
+	w.Header().Add("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, _ = w.Write(marshalled)
 }
 
 /**
@@ -210,9 +301,7 @@ func serveImageRoutes(r *mux.Router) {
 	initAWS()
 
 	r.HandleFunc("/getImage/:id", getImage).Methods("GET")
-	r.HandleFunc("/getImagesFrom/:user", getImagesFromUser).Methods("GET")
-	r.HandleFunc("/getLatestImages", getLatestImages).Methods("GET")
-	r.HandleFunc("/getTopImages", getTopImages).Methods("GET")
+	r.HandleFunc("/getImagesMetadata", getImagesMetadata).Methods("GET")
 
 	s := r.Methods("PUT", "DELETE", "PATCH").Subrouter()
 
@@ -223,7 +312,5 @@ func serveImageRoutes(r *mux.Router) {
 	s.HandleFunc("/editImageACL", editImageACL).Methods("PATCH")
 	s.HandleFunc("/likeImage", likeImage).Methods("PUT")
 	s.HandleFunc("/unlikeImage", unlikeImage).Methods("DELETE")
-	s.HandleFunc("/favouriteImage", favouriteImage).Methods("PUT")
-	s.HandleFunc("/unfavouriteImage", unfavouriteImage).Methods("DELETE")
 	s.HandleFunc("/deleteAllImages", deleteAllImages).Methods("DELETE")
 }

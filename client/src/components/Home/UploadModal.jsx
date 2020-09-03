@@ -17,6 +17,8 @@ const UploadModal = ({open, handleClose}) => {
     const [file, setFile] = useState(null);
     const [caption, setCaption] = useState("");
     const [uploading, setUploading] = useState(false);
+    const [accessLevel, setAccessLevel] = useState("public");
+    const [accessLevelIDs, setAccessListIDs] = useState([]);
 
     const fileURL = (file) ? URL.createObjectURL(file) : null;
 
@@ -32,6 +34,8 @@ const UploadModal = ({open, handleClose}) => {
         const formData = new FormData();
         formData.append('file', file);
         formData.append('caption', caption);
+        formData.append('accessLevel', accessLevel);
+        formData.append('accessListIDs', accessLevelIDs);
 
         const config = {
             headers: {

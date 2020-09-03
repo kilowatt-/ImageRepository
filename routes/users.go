@@ -45,16 +45,16 @@ func getUserWithLogin(email string, password string, channel chan findUserRespon
 		Password: nil,
 	}
 
-	response, err := database.FindOne("users", filter, nil)
+	response := database.FindOne("users", filter, nil)
 
-	if err != nil {
-		channel <- findUserResponse{user: blankUser, err: err}
-	} else if len(response) == 0 {
+	if response.Err != nil {
+		channel <- findUserResponse{user: blankUser, err: response.Err}
+	} else if len(response.Result) == 0 {
 		channel <- findUserResponse{user: blankUser, err: errors.New(UserNotFound)}
 	} else {
 		var user model.User
 
-		bsonBytes, _ := bson.Marshal(response)
+		bsonBytes, _ := bson.Marshal(response.Result)
 
 		_ = bson.Unmarshal(bsonBytes, &user)
 
@@ -160,7 +160,7 @@ func handleSignUp(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Email "+email+" already registered", http.StatusConflict)
 			}
 		} else {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			sendInternalServerError(w)
 		}
 
 	} else {
@@ -203,14 +203,14 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusNotFound)
 				_, _ = w.Write([]byte("Provided email/password do not match"))
 			} else {
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				sendInternalServerError(w)
 			}
 		} else {
 			token, expiry, jwtErr := routes.CreateLoginToken(res.user)
 
 			if jwtErr != nil {
 				log.Println(jwtErr)
-				http.Error(w, "Internal server error", http.StatusInternalServerError)
+				sendInternalServerError(w)
 			} else {
 				res.user.Password = nil
 				jsonResponse, jsonErr := json.Marshal(res.user)
@@ -218,7 +218,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 				if jsonErr != nil {
 					log.Println(jsonErr)
-					http.Error(w, "Internal server error", http.StatusInternalServerError)
+					sendInternalServerError(w)
 				} else {
 
 					jsonEncodedCookie := strings.ReplaceAll(string(jsonResponse), "\"", "'") // Have to do this to Set-Cookie with JSON.
