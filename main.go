@@ -39,7 +39,7 @@ func main() {
 	}
 
 	if _, awsSecretKeyExists := os.LookupEnv("AWS_SECRET_ACCESS_KEY"); !awsSecretKeyExists {
-		log.Fatal(AWSKeyNotFound)
+		log.Fatal(AWSSecretKeyNotFound)
 	}
 
 	if _, awsRegionExists := os.LookupEnv("AWS_REGION"); !awsRegionExists {
