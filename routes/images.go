@@ -287,7 +287,7 @@ func getImagesMetadata(w http.ResponseWriter, r *http.Request) {
 }
 
 /**
-Initializes the AWS session, S3 Client and S3 Uploader.
+	Initializes the AWS session, S3 Client S3 Uploader and S3 Downloader.
 */
 func initAWS() {
 	awsSession = session.Must(session.NewSessionWithOptions(session.Options{SharedConfigState: session.SharedConfigEnable}))
