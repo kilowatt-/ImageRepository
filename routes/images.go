@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"bytes"
 	"encoding/json"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -14,6 +15,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -26,9 +28,9 @@ import (
 const bucketName = "imgrepository-cdn"
 
 type imageDatabaseResponse struct {
-	images []*model.Image
+	images    []*model.Image
 	userIDMap *map[string]bool
-	err error
+	err       error
 }
 
 var publicFilter = bson.D{{"accessLevel", "public"}}
@@ -54,7 +56,7 @@ func getOneImage(filter bson.D, opts *options.FindOneOptions, channel chan image
 	res := database.FindOne("images", filter, opts)
 
 	if res.Err != nil {
-		channel <- imageDatabaseResponse{ images: nil, err: res.Err }
+		channel <- imageDatabaseResponse{images: nil, err: res.Err}
 	} else {
 		imageList := []*model.Image{}
 
@@ -68,7 +70,7 @@ func getOneImage(filter bson.D, opts *options.FindOneOptions, channel chan image
 			imageList = append(imageList, &image)
 		}
 
-		channel <- imageDatabaseResponse{ images: imageList, err: nil}
+		channel <- imageDatabaseResponse{images: imageList, err: nil}
 	}
 }
 
@@ -86,7 +88,7 @@ func getImagesMetadataFromDatabase(filter bson.D, opts *options.FindOptions, cha
 		}
 		return
 	} else {
-		for i:=0; i < len(res.Result); i++ {
+		for i := 0; i < len(res.Result); i++ {
 			image := model.Image{}
 
 			bsonBytes, _ := bson.Marshal(res.Result[i])
@@ -129,12 +131,12 @@ func appendAuthorsToImages(images []*model.Image, idMap map[string]bool) {
 	}
 
 	filter := bson.D{{"_id", bson.D{{"$in", userIDs}}}}
-	projection :=  bson.D{{"name",1}, {"userHandle", 1}}
+	projection := bson.D{{"name", 1}, {"userHandle", 1}}
 	// Get author data
 	c := make(chan []findUserResponse)
 	go getUsers(filter, projection, c)
 
-	res := <- c
+	res := <-c
 
 	if len(res) == 1 && res[0].err != nil {
 		return
@@ -154,9 +156,9 @@ func appendAuthorsToImages(images []*model.Image, idMap map[string]bool) {
 }
 
 /**
-	Builds the image query based on the parameters passed in the request.
+Builds the image query based on the parameters passed in the request.
 
-	Returns a BSON Document representing the database query to be built, and a number that represents the limit.
+Returns a BSON Document representing the database query to be built, and a number that represents the limit.
 */
 func buildImageQuery(r *http.Request) (bson.D, int64) {
 	loggedInUser := getUserIDFromTokenNotStrictValidation(r)
@@ -210,11 +212,11 @@ func buildImageQuery(r *http.Request) (bson.D, int64) {
 }
 
 /**
-	Gets user ID from the token.
+Gets user ID from the token.
 
-	This is required for endpoints which might require a user ID, but are not checked by the middleware because they
-	are not strictly necessary. JWT Middleware is only run on functions where the user MUST be authenticated.
- */
+This is required for endpoints which might require a user ID, but are not checked by the middleware because they
+are not strictly necessary. JWT Middleware is only run on functions where the user MUST be authenticated.
+*/
 func getUserIDFromTokenNotStrictValidation(r *http.Request) string {
 	cookie, err := r.Cookie("token")
 	if err == nil {
@@ -246,66 +248,75 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 	if parseFormErr != nil {
 		http.Error(w, parseFormErr.Error(), http.StatusBadRequest)
 	} else {
-		file, handler, formFileErr := r.FormFile("file")
+		file, _, formFileErr := r.FormFile("file")
+
+		defer file.Close()
 
 		if formFileErr != nil {
 			http.Error(w, "Error parsing file", http.StatusBadRequest)
-		} else {
-			mimeType := handler.Header
-
-			if !validateAcceptableMIMEType(mimeType.Get("Content-Type")) {
-				http.Error(w, "Uploaded non-image file type", http.StatusBadRequest)
-			} else {
-				authorID := getUserIDFromToken(r)
-				accessLevel := r.FormValue("accessLevel")
-				accessListIDsString := r.FormValue("accessListIDs")
-				caption := r.FormValue("caption")
-
-				var accessListIDs []string
-
-				jsonParseErr := json.Unmarshal([]byte(accessListIDsString), &accessListIDs)
-
-				if jsonParseErr != nil {
-					log.Println("passed empty access List IDs")
-					accessListIDs = []string{}
-				}
-				image := model.Image{
-					AuthorID:       authorID,
-					AccessLevel:    accessLevel,
-					Caption:		caption,
-					UploadDate:		time.Now(),
-					AccessListIDs:  accessListIDs,
-					Likes:          []string{},
-				}
-
-				channel := make(chan *database.InsertResponse)
-
-				go insertImage(image, channel)
-
-				insertResponse := <-channel
-
-				if insertResponse.Err != nil {
-					sendInternalServerError(w)
-				} else {
-					id := insertResponse.ID
-
-					_, uploadErr := s3Uploader.Upload(&s3manager.UploadInput{
-						Bucket: aws.String(bucketName),
-						Key:    aws.String(id),
-						Body:   file,
-					})
-
-					if uploadErr != nil {
-						sendInternalServerError(w)
-					} else {
-						insertResponse.Err = nil
-						w.WriteHeader(200)
-						jsonResponse, _ := json.Marshal(insertResponse)
-						_, _ = w.Write(jsonResponse)
-					}
-				}
-			}
+			return
 		}
+		buf := bytes.NewBuffer(nil)
+
+		if _, err := io.Copy(buf, file); err != nil {
+			sendInternalServerError(w)
+			return
+		}
+
+		if !validateAcceptableMIMEType(http.DetectContentType(buf.Bytes())) {
+			http.Error(w, "Uploaded non-image file type", http.StatusBadRequest)
+			return
+		}
+
+		authorID := getUserIDFromToken(r)
+		accessLevel := r.FormValue("accessLevel")
+		accessListIDsString := r.FormValue("accessListIDs")
+		caption := r.FormValue("caption")
+
+		var accessListIDs []string
+
+		jsonParseErr := json.Unmarshal([]byte(accessListIDsString), &accessListIDs)
+
+		if jsonParseErr != nil {
+			log.Println("passed empty access List IDs")
+			accessListIDs = []string{}
+		}
+
+		image := model.Image{
+			AuthorID:      authorID,
+			AccessLevel:   accessLevel,
+			Caption:       caption,
+			UploadDate:    time.Now(),
+			AccessListIDs: accessListIDs,
+			Likes:         []string{},
+		}
+
+		channel := make(chan *database.InsertResponse)
+
+		go insertImage(image, channel)
+
+		insertResponse := <-channel
+
+		if insertResponse.Err != nil {
+			sendInternalServerError(w)
+			return
+		}
+		id := insertResponse.ID
+
+		_, uploadErr := s3Uploader.Upload(&s3manager.UploadInput{
+			Bucket: aws.String(bucketName),
+			Key:    aws.String(id),
+			Body:   file,
+		})
+
+		if uploadErr != nil {
+			sendInternalServerError(w)
+			return
+		}
+		insertResponse.Err = nil
+		w.WriteHeader(200)
+		jsonResponse, _ := json.Marshal(insertResponse)
+		_, _ = w.Write(jsonResponse)
 	}
 }
 
@@ -330,21 +341,23 @@ func deleteAllImages(w http.ResponseWriter, r *http.Request) {
 }
 
 /**
-	Gets image by ID, and if user is authorized to see it.
+Gets image by ID, and if user is authorized to see it.
 
-	Accepted query parameters:
-		- id: Image ID.
+Accepted query parameters:
+	- id: Image ID.
 
-	Returns: (image/*)
-		- 200 OK: With the provided image.
-		- 400: If id is not present, or an invalid ID is passed in.
-		- 404: If image is not found, or user is not authorised to view this image. (there is no difference).
- */
+Returns: (image/*)
+	- 200 OK: With the provided image.
+	- 400: If id is not present, or an invalid ID is passed in.
+	- 404: If image is not found, or user is not authorised to view this image. (there is no difference).
+*/
 func getImage(w http.ResponseWriter, r *http.Request) {
+	const parseErrorMessage = "Could not parse id parameter"
+
 	imgIdArr, ok := r.URL.Query()["id"]
 
 	if !ok || len(imgIdArr) < 1 || len(imgIdArr[0]) < 1 {
-		http.Error(w, "Could not parse id parameter", http.StatusBadRequest)
+		http.Error(w, parseErrorMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -353,7 +366,7 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 	hex, hexErr := primitive.ObjectIDFromHex(imgId)
 
 	if hexErr != nil {
-		http.Error(w, "Did not pass valid image ID", http.StatusBadRequest)
+		http.Error(w, parseErrorMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -362,17 +375,15 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 
 	filter := bson.D{{"$and",
 		[]interface{}{
-		bson.D{{"$or", visibilityFilters}},
-		bson.D{{"_id", hex},
-		}}}}
-
-	log.Println(filter)
+			bson.D{{"$or", visibilityFilters}},
+			bson.D{{"_id", hex},
+			}}}}
 
 	channel := make(chan imageDatabaseResponse)
 
 	go getOneImage(filter, nil, channel)
 
-	res := <- channel
+	res := <-channel
 
 	if res.err != nil {
 		sendInternalServerError(w)
@@ -396,7 +407,7 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 
 	_, dlErr := s3Downloader.Download(file, &s3.GetObjectInput{
 		Bucket: aws.String(bucketName),
-		Key: aws.String(imgId),
+		Key:    aws.String(imgId),
 	})
 
 	if dlErr != nil {
@@ -423,32 +434,32 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 }
 
 /**
-	Gets the metadata (not the actual image files) of the images in the database based on the queries passed in, in chronologically descending order.
+Gets the metadata (not the actual image files) of the images in the database based on the queries passed in, in chronologically descending order.
 
-	Accepted query parameters:
-		- before: UNIX time stamp representing the latest image that can be uploaded.
-		- after: UNIX time stamp repesenting the earliest image that should be fetched.
-		- limit: integer. the limit on the number of images to fetch. Default 10 if not specified.
-		- user: userID. Gets images from a particular user.
+Accepted query parameters:
+	- before: UNIX time stamp representing the latest image that can be uploaded.
+	- after: UNIX time stamp repesenting the earliest image that should be fetched.
+	- limit: integer. the limit on the number of images to fetch. Default 10 if not specified.
+	- user: userID. Gets images from a particular user.
 
-	Returns: (application/json)
-		- 200: With list of images that match search criteria.
-		- 500: Internal server error.
+Returns: (application/json)
+	- 200: With list of images that match search criteria.
+	- 500: Internal server error.
 
- */
+*/
 func getImagesMetadata(w http.ResponseWriter, r *http.Request) {
 	filter, limit := buildImageQuery(r)
 
 	opts := &options.FindOptions{
-		Limit:               &limit,
-		Sort:                bson.D{{"uploadDateTime", -1}},
+		Limit: &limit,
+		Sort:  bson.D{{"uploadDateTime", -1}},
 	}
 
 	channel := make(chan imageDatabaseResponse)
 
 	go getImagesMetadataFromDatabase(filter, opts, channel)
 
-	res := <- channel
+	res := <-channel
 
 	if res.err != nil {
 		sendInternalServerError(w)
@@ -465,7 +476,7 @@ func getImagesMetadata(w http.ResponseWriter, r *http.Request) {
 }
 
 /**
-	Initializes the AWS session, S3 Client S3 Uploader and S3 Downloader.
+Initializes the AWS session, S3 Client S3 Uploader and S3 Downloader.
 */
 func initAWS() {
 	awsSession = session.Must(session.NewSessionWithOptions(session.Options{SharedConfigState: session.SharedConfigEnable}))
