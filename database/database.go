@@ -39,7 +39,7 @@ type DeleteResponse struct {
 	Err error
 }
 
-func DeleteMany(collectionName string, filter bson.D) (int64, error) {
+func DeleteMany(collectionName string, filter interface{}) (int64, error) {
 	if client != nil {
 		collection := client.Database(dbName).Collection(collectionName)
 
@@ -56,7 +56,7 @@ func DeleteMany(collectionName string, filter bson.D) (int64, error) {
 
 }
 
-func DeleteOne(collectionName string, filter bson.D) (int64, error) {
+func DeleteOne(collectionName string, filter interface{}) (int64, error) {
 	if client != nil {
 		collection := client.Database(dbName).Collection(collectionName)
 
@@ -73,7 +73,7 @@ func DeleteOne(collectionName string, filter bson.D) (int64, error) {
 
 }
 
-func Update(collectionName string, filter bson.D, update bson.D) (*UpdateResponse, error) {
+func Update(collectionName string, filter interface{}, update bson.D) (*UpdateResponse, error) {
 	if client != nil {
 		collection := client.Database(dbName).Collection(collectionName)
 
@@ -92,7 +92,7 @@ func Update(collectionName string, filter bson.D, update bson.D) (*UpdateRespons
 	return nil, errors.New("MongoDB client not initialized yet")
 }
 
-func UpdateOne(collectionName string, filter bson.D, update bson.D) (*UpdateResponse, error) {
+func UpdateOne(collectionName string, filter interface{}, update bson.D) (*UpdateResponse, error) {
 	if client != nil {
 		collection := client.Database(dbName).Collection(collectionName)
 
@@ -127,7 +127,7 @@ func InsertOne(collectionName string, object interface{}) *InsertResponse {
 	return &InsertResponse{"", errors.New("MongoDB client not initialized yet")}
 }
 
-func FindOneAndUpdate(collectionName string, filter bson.D, update bson.D) *FindOneResponse {
+func FindOneAndUpdate(collectionName string, filter interface{}, update bson.D) *FindOneResponse {
 	if client != nil {
 		collection := client.Database(dbName).Collection(collectionName)
 
@@ -144,7 +144,7 @@ func FindOneAndUpdate(collectionName string, filter bson.D, update bson.D) *Find
 	return &FindOneResponse{nil, errors.New("MongoDB client not initialized yet")}
 }
 
-func FindOne(collectionName string, filter bson.D, opts *options.FindOneOptions) *FindOneResponse {
+func FindOne(collectionName string, filter interface{}, opts *options.FindOneOptions) *FindOneResponse {
 	if client != nil {
 		if opts == nil {
 			opts = &options.FindOneOptions{}
@@ -167,7 +167,7 @@ func FindOne(collectionName string, filter bson.D, opts *options.FindOneOptions)
 	return &FindOneResponse{nil, errors.New("MongoDB client not initialized yet")}
 }
 
-func Find(collectionName string, filter bson.D, opts *options.FindOptions) *FindResponse {
+func Find(collectionName string, filter interface{}, opts *options.FindOptions) *FindResponse {
 	if client != nil {
 		if opts == nil {
 			opts = &options.FindOptions{}

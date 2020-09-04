@@ -7,3 +7,4 @@ type User struct {
 	Email string	`json:"emailAddr,omitempty" bson:"email,omitempty"`
 	Password []byte	`json:"pwd,omitempty" bson:"password,omitempty"`
 }
+

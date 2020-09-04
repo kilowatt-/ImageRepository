@@ -14,14 +14,24 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 const bucketName = "imgrepository-cdn"
 
+type imageDatabaseResponse struct {
+	images []*model.Image
+	userIDMap *map[string]bool
+	err error
+}
+
+var publicFilter = bson.D{{"accessLevel", "public"}}
 var awsSession *session.Session = nil
 var s3Client *s3.S3 = nil
 var s3Uploader *s3manager.Uploader = nil
@@ -40,24 +50,113 @@ func insertImage(image model.Image, channel chan *database.InsertResponse) {
 	channel <- res
 }
 
-func getFindOneImages(filter bson.D, opts *options.FindOneOptions, channel chan *database.FindOneResponse) {
+func getOneImage(filter bson.D, opts *options.FindOneOptions, channel chan imageDatabaseResponse) {
 	res := database.FindOne("images", filter, opts)
-	channel <- res
+
+	if res.Err != nil {
+		channel <- imageDatabaseResponse{ images: nil, err: res.Err }
+	} else {
+		imageList := []*model.Image{}
+
+		if res.Result != nil {
+			image := model.Image{}
+
+			bsonBytes, _ := bson.Marshal(res.Result)
+
+			_ = bson.Unmarshal(bsonBytes, &image)
+
+			imageList = append(imageList, &image)
+		}
+
+		channel <- imageDatabaseResponse{ images: imageList, err: nil}
+	}
 }
 
-func getFindImages(filter bson.D, opts *options.FindOptions, channel chan *database.FindResponse) {
+func getImagesMetadataFromDatabase(filter bson.D, opts *options.FindOptions, channel chan imageDatabaseResponse) {
 	res := database.Find("images", filter, opts)
-	channel <- res
+
+	imageList := []*model.Image{}
+	var authorIDMap = make(map[string]bool)
+
+	if res.Err != nil {
+		channel <- imageDatabaseResponse{
+			images:    nil,
+			userIDMap: nil,
+			err:       res.Err,
+		}
+		return
+	} else {
+		for i:=0; i < len(res.Result); i++ {
+			image := model.Image{}
+
+			bsonBytes, _ := bson.Marshal(res.Result[i])
+
+			_ = bson.Unmarshal(bsonBytes, &image)
+
+			authorIDMap[image.AuthorID] = true
+			imageList = append(imageList, &image)
+		}
+	}
+
+	channel <- imageDatabaseResponse{imageList, &authorIDMap, nil}
 }
 
 func validateAcceptableMIMEType(mimeType string) bool {
 	return mimeset[mimeType]
 }
 
-/**
-Builds the image query based on the parameters passed in the request.
+func buildVisibilityFilters(userid string) []interface{} {
+	filters := []interface{}{publicFilter}
 
-Returns a BSON Document representing the database query to be built, and a number that represents the limit.
+	if userid != "" {
+		filters = append(filters, bson.D{{"accessListIDs", userid}})
+		filters = append(filters, bson.D{{"authorid", userid}})
+	}
+
+	return filters
+}
+
+// Appends author to each image in the list.
+func appendAuthorsToImages(images []*model.Image, idMap map[string]bool) {
+	userIDs := make([]primitive.ObjectID, len(idMap))
+
+	i := 0
+
+	for k := range idMap {
+		hex, _ := primitive.ObjectIDFromHex(k)
+		userIDs[i] = hex
+		i++
+	}
+
+	filter := bson.D{{"_id", bson.D{{"$in", userIDs}}}}
+	projection :=  bson.D{{"name",1}, {"userHandle", 1}}
+	// Get author data
+	c := make(chan []findUserResponse)
+	go getUsers(filter, projection, c)
+
+	res := <- c
+
+	if len(res) == 1 && res[0].err != nil {
+		return
+	}
+
+	userMap := make(map[string]model.User)
+
+	for i := 0; i < len(res); i++ {
+		cur := res[i].user
+		userMap[cur.ID] = cur
+	}
+
+	for i := 0; i < len(images); i++ {
+		cur := images[i]
+		cur.SetAuthor(userMap[cur.AuthorID])
+	}
+}
+
+/**
+	Builds the image query based on the parameters passed in the request.
+
+	Returns a BSON Document representing the database query to be built, and a number that represents the limit.
 */
 func buildImageQuery(r *http.Request) (bson.D, int64) {
 	loggedInUser := getUserIDFromTokenNotStrictValidation(r)
@@ -96,12 +195,7 @@ func buildImageQuery(r *http.Request) (bson.D, int64) {
 		subFilters = append(subFilters, bson.D{{"uploadDateTime", bson.D{{"$gte", primitive.NewDateTimeFromTime(after)}}}})
 	}
 
-	visibilityFilters := []interface{}{bson.D{{"accessLevel", "public"}}}
-
-	if loggedInUser != "" {
-		visibilityFilters = append(visibilityFilters, bson.D{{"accessListIDs", loggedInUser}})
-		visibilityFilters = append(visibilityFilters, bson.D{{"authorid", loggedInUser}})
-	}
+	visibilityFilters := buildVisibilityFilters(loggedInUser)
 
 	if user != "" {
 		subFilters = append(subFilters, bson.D{{"$and", []interface{}{
@@ -227,16 +321,105 @@ func unlikeImage(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func getImage(w http.ResponseWriter, r *http.Request) {
-
-}
-
 func deleteImage(w http.ResponseWriter, r *http.Request) {
 
 }
 
 func deleteAllImages(w http.ResponseWriter, r *http.Request) {
 
+}
+
+/**
+	Gets image by ID, and if user is authorized to see it.
+
+	Accepted query parameters:
+		- id: Image ID.
+
+	Returns: (image/*)
+		- 200 OK: With the provided image.
+		- 400: If id is not present, or an invalid ID is passed in.
+		- 404: If image is not found, or user is not authorised to view this image. (there is no difference).
+ */
+func getImage(w http.ResponseWriter, r *http.Request) {
+	imgIdArr, ok := r.URL.Query()["id"]
+
+	if !ok || len(imgIdArr) < 1 || len(imgIdArr[0]) < 1 {
+		http.Error(w, "Could not parse id parameter", http.StatusBadRequest)
+		return
+	}
+
+	imgId := imgIdArr[0]
+
+	hex, hexErr := primitive.ObjectIDFromHex(imgId)
+
+	if hexErr != nil {
+		http.Error(w, "Did not pass valid image ID", http.StatusBadRequest)
+		return
+	}
+
+	loggedInUser := getUserIDFromTokenNotStrictValidation(r)
+	visibilityFilters := buildVisibilityFilters(loggedInUser)
+
+	filter := bson.D{{"$and",
+		[]interface{}{
+		bson.D{{"$or", visibilityFilters}},
+		bson.D{{"_id", hex},
+		}}}}
+
+	log.Println(filter)
+
+	channel := make(chan imageDatabaseResponse)
+
+	go getOneImage(filter, nil, channel)
+
+	res := <- channel
+
+	if res.err != nil {
+		sendInternalServerError(w)
+		return
+	}
+
+	if len(res.images) == 0 {
+		http.Error(w, "Image not found", http.StatusNotFound)
+		return
+	}
+
+	file, err := ioutil.TempFile("", imgId)
+
+	if err != nil {
+		log.Println(err)
+		sendInternalServerError(w)
+		return
+	}
+
+	defer os.Remove(file.Name())
+
+	_, dlErr := s3Downloader.Download(file, &s3.GetObjectInput{
+		Bucket: aws.String(bucketName),
+		Key: aws.String(imgId),
+	})
+
+	if dlErr != nil {
+		if strings.Contains(dlErr.Error(), "NoSuchKey") {
+			http.Error(w, "Image not found", http.StatusNotFound)
+		} else {
+			log.Println(dlErr)
+			sendInternalServerError(w)
+		}
+		return
+	}
+
+	fileContent, fileErr := ioutil.ReadFile(file.Name())
+
+	if fileErr != nil {
+		log.Println(fileErr)
+		sendInternalServerError(w)
+		return
+	}
+
+	w.Header().Add("Content-Type", http.DetectContentType(fileContent))
+	w.WriteHeader(200)
+	w.Write(fileContent)
 }
 
 /**
@@ -247,6 +430,11 @@ func deleteAllImages(w http.ResponseWriter, r *http.Request) {
 		- after: UNIX time stamp repesenting the earliest image that should be fetched.
 		- limit: integer. the limit on the number of images to fetch. Default 10 if not specified.
 		- user: userID. Gets images from a particular user.
+
+	Returns: (application/json)
+		- 200: With list of images that match search criteria.
+		- 500: Internal server error.
+
  */
 func getImagesMetadata(w http.ResponseWriter, r *http.Request) {
 	filter, limit := buildImageQuery(r)
@@ -256,30 +444,20 @@ func getImagesMetadata(w http.ResponseWriter, r *http.Request) {
 		Sort:                bson.D{{"uploadDateTime", -1}},
 	}
 
-	channel := make(chan *database.FindResponse)
+	channel := make(chan imageDatabaseResponse)
 
-	go getFindImages(filter, opts, channel)
+	go getImagesMetadataFromDatabase(filter, opts, channel)
 
 	res := <- channel
 
-	imageList := []model.Image{}
-
-	if res.Err != nil {
+	if res.err != nil {
 		sendInternalServerError(w)
 		return
 	}
 
-	for i:=0; i < len(res.Result); i++ {
-		image := model.Image{}
+	appendAuthorsToImages(res.images, *res.userIDMap)
 
-		bsonBytes, _ := bson.Marshal(res.Result[i])
-
-		_ = bson.Unmarshal(bsonBytes, &image)
-
-		imageList = append(imageList, image)
-	}
-
-	marshalled, _ := json.Marshal(imageList)
+	marshalled, _ := json.Marshal(res.images)
 
 	w.Header().Add("Content-Type", "application/json")
 	w.WriteHeader(200)
@@ -299,7 +477,7 @@ func initAWS() {
 func serveImageRoutes(r *mux.Router) {
 	initAWS()
 
-	r.HandleFunc("/getImage/:id", getImage).Methods("GET")
+	r.HandleFunc("/getImage", getImage).Methods("GET")
 	r.HandleFunc("/getImagesMetadata", getImagesMetadata).Methods("GET")
 
 	s := r.Methods("PUT", "DELETE", "PATCH").Subrouter()

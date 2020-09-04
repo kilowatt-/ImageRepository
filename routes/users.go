@@ -8,6 +8,7 @@ import (
 	"github.com/kilowatt-/ImageRepository/model"
 	routes "github.com/kilowatt-/ImageRepository/routes/middleware"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"golang.org/x/crypto/bcrypt"
 	"log"
 	"net/http"
@@ -28,6 +29,35 @@ func createUser(user model.User, channel chan *database.InsertResponse) {
 	res := database.InsertOne("users", user)
 
 	channel <- res
+}
+
+/**
+	Gets users from the database.
+ */
+func getUsers(filter interface{}, projection interface{}, channel chan []findUserResponse) {
+	var opts *options.FindOptions = nil
+
+	if projection != nil {
+		opts = &options.FindOptions{ Projection: projection}
+	}
+
+	var userArray = []findUserResponse{}
+
+	res := database.Find("users", filter, opts)
+
+	if res.Err != nil {
+		userArray = append(userArray, findUserResponse{model.User{}, res.Err})
+	} else {
+		for i := 0; i < len(res.Result); i++ {
+			var user model.User
+			bsonBytes, _ := bson.Marshal(res.Result[i])
+			_ = bson.Unmarshal(bsonBytes, &user)
+
+			userArray = append(userArray, findUserResponse{user, nil})
+		}
+	}
+
+	channel <- userArray
 }
 
 
