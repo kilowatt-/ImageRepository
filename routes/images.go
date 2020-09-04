@@ -243,12 +243,13 @@ func getUserIDFromToken(r *http.Request) string {
 }
 
 func addNewImage(w http.ResponseWriter, r *http.Request) {
+	const uploadNonImageFileTypeErr = "Uploaded non-image file type"
 	parseFormErr := r.ParseMultipartForm(10 << 20)
 	// Maximum total form data size: 10MB.
 	if parseFormErr != nil {
 		http.Error(w, parseFormErr.Error(), http.StatusBadRequest)
 	} else {
-		file, _, formFileErr := r.FormFile("file")
+		file, fileHeader, formFileErr := r.FormFile("file")
 
 		defer file.Close()
 
@@ -256,6 +257,14 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Error parsing file", http.StatusBadRequest)
 			return
 		}
+
+		contentType := fileHeader.Header.Get("Content-Type")
+
+		if !validateAcceptableMIMEType(contentType) {
+			http.Error(w, uploadNonImageFileTypeErr, http.StatusBadRequest)
+			return
+		}
+
 		buf := bytes.NewBuffer(nil)
 
 		if _, err := io.Copy(buf, file); err != nil {
@@ -264,7 +273,7 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if !validateAcceptableMIMEType(http.DetectContentType(buf.Bytes())) {
-			http.Error(w, "Uploaded non-image file type", http.StatusBadRequest)
+			http.Error(w, uploadNonImageFileTypeErr, http.StatusBadRequest)
 			return
 		}
 
