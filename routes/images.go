@@ -47,7 +47,7 @@ var mimeset = map[string]bool{
 }
 
 func insertImage(image model.Image, channel chan *database.InsertResponse) {
-	res := database.InsertOne("images", image)
+	res := database.InsertOne("images", image, nil)
 	channel <- res
 }
 

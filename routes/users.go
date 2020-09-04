@@ -26,7 +26,7 @@ type findUserResponse struct {
 }
 
 func createUser(user model.User, channel chan *database.InsertResponse) {
-	res := database.InsertOne("users", user)
+	res := database.InsertOne("users", user, nil)
 
 	channel <- res
 }

@@ -30,6 +30,8 @@ func main() {
 		log.Fatal(dbConnErr)
 	}
 
+	defer database.Disconnect()
+
 	if _, jwtKeyExists := os.LookupEnv("JWT_KEY"); !jwtKeyExists {
 		log.Fatal(JWTKeyNotFound)
 	}
@@ -91,10 +93,6 @@ func main() {
 	signal.Notify(c, os.Interrupt)
 
 	<-c
-
-	if err := database.Disconnect(); err != nil {
-		log.Println(err)
-	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), wait)
 
