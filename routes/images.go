@@ -155,9 +155,9 @@ func appendAuthorsToImages(images []*model.Image, idMap map[string]bool) {
 }
 
 /**
-Builds the image query based on the parameters passed in the request.
+	Builds the image query based on the parameters passed in the request.
 
-Returns a BSON Document representing the database query to be built, and a number that represents the limit.
+	Returns a BSON Document representing the database query to be built, and a number that represents the limit.
 */
 func buildImageQuery(r *http.Request) (bson.D, int64) {
 	loggedInUser := getUserIDFromTokenNotStrictValidation(r)
