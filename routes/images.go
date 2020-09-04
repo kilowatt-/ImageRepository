@@ -38,7 +38,7 @@ var awsSession *session.Session = nil
 var s3Uploader *s3manager.Uploader = nil
 var s3Downloader *s3manager.Downloader = nil
 
-var mimeset = map[string]bool{
+var mimeSet = map[string]bool{
 	"image/bmp":  true,
 	"image/gif":  true,
 	"image/jpeg": true,
@@ -103,7 +103,7 @@ func getImagesMetadataFromDatabase(filter bson.D, opts *options.FindOptions, cha
 }
 
 func validateAcceptableMIMEType(mimeType string) bool {
-	return mimeset[mimeType]
+	return mimeSet[mimeType]
 }
 
 func buildVisibilityFilters(userid string) []interface{} {
@@ -155,11 +155,11 @@ func appendAuthorsToImages(images []*model.Image, idMap map[string]bool) {
 }
 
 /**
-	Builds the image query based on the parameters passed in the request.
+Builds the image query based on the parameters passed in the request.
 
-	Returns a BSON Document representing the database query to be built, and a number that represents the limit.
+Returns a BSON Document representing the database query to be built, and a number that represents the limit.
 */
-func buildImageQuery(r *http.Request) (bson.D, int64) {
+func buildImageQuery(r *http.Request) (*bson.D, int64) {
 	loggedInUser := getUserIDFromTokenNotStrictValidation(r)
 
 	before := time.Time{}
@@ -207,7 +207,7 @@ func buildImageQuery(r *http.Request) (bson.D, int64) {
 		subFilters = append(subFilters, bson.D{{"$or", visibilityFilters}})
 	}
 
-	return bson.D{{"$and", subFilters}}, limit
+	return &bson.D{{"$and", subFilters}}, limit
 }
 
 /**
@@ -334,32 +334,85 @@ func editImageACL(w http.ResponseWriter, r *http.Request) {
 
 }
 
+/**
+[PUT]
+
+Adds this user to the image's like list.
+
+Query parameters:
+	- id: the image ID.
+
+Returns:
+	- 200: Image liked successfully.
+	- 400: id not passed in.
+	- 404: Image not found, or user not authorised to view image. (no difference.)
+	- 409: User already liked image. No-op.
+*/
 func likeImage(w http.ResponseWriter, r *http.Request) {
 
 }
 
+/**
+[DELETE]
+
+Removes this user from the image's unlike list.
+
+Query parameters:
+	- id: the image ID.
+
+Returns:
+	- 200: Image liked successfully.
+	- 400: id not passed in.
+	- 404: Image not found, or user not authorised to view image. (no difference.)
+	- 409: User already liked image. No-op.
+*/
 func unlikeImage(w http.ResponseWriter, r *http.Request) {
 
 }
 
+/**
+[DELETE]
+
+Deletes the given image.
+
+Query parameters:
+	- id: the image ID.
+
+Returns
+	- 200: Image deleted successfully.
+	- 400: Image ID was not passed in.
+	- 403: User does not have permission to delete image.
+*/
 func deleteImage(w http.ResponseWriter, r *http.Request) {
 
 }
 
+/**
+[DELETE]
+Deletes all images posted by this user.
+
+Query parameters:
+	- id: the image ID.
+
+Returns
+	- 200: Images deleted successfully. Will return the number of images deleted.
+	- 403: User does not have permission to delete image.
+*/
 func deleteAllImages(w http.ResponseWriter, r *http.Request) {
 
 }
 
 /**
+[GET]
 Gets image by ID, and if user is authorized to see it.
 
 Accepted query parameters:
 	- id: Image ID.
 
 Returns: (image/*)
-	- 200 OK: With the provided image.
-	- 400: If id is not present, or an invalid ID is passed in.
-	- 404: If image is not found, or user is not authorised to view this image. (there is no difference).
+		- 200 OK: With the provided image.
+		- 400: If id is not present, or an invalid ID is passed in.
+		- 404: If image is not found, or user is not authorised to view this image. (there is no difference).
 */
 func getImage(w http.ResponseWriter, r *http.Request) {
 	const parseErrorMessage = "Could not parse id parameter"
@@ -444,18 +497,19 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 }
 
 /**
-Gets the metadata (not the actual image files) of the images in the database based on the queries passed in, in chronologically descending order.
+	[GET]
 
-Accepted query parameters:
-	- before: UNIX time stamp representing the latest image that can be uploaded.
-	- after: UNIX time stamp repesenting the earliest image that should be fetched.
-	- limit: integer. the limit on the number of images to fetch. Default 10 if not specified.
-	- user: userID. Gets images from a particular user.
+	Gets the metadata (not the actual image files) of the images in the database based on the queries passed in, in chronologically descending order.
 
-Returns: (application/json)
-	- 200: With list of images that match search criteria.
-	- 500: Internal server error.
+	Accepted query parameters:
+		- before: UNIX time stamp representing the latest image that can be uploaded.
+		- after: UNIX time stamp repesenting the earliest image that should be fetched.
+		- limit: integer. the limit on the number of images to fetch. Default 10 if not specified.
+		- user: userID. Gets images from a particular user.
 
+	Returns: (application/json)
+		- 200: With list of images that match search criteria.
+		- 500: Internal server error.
 */
 func getImagesMetadata(w http.ResponseWriter, r *http.Request) {
 	filter, limit := buildImageQuery(r)
@@ -467,7 +521,7 @@ func getImagesMetadata(w http.ResponseWriter, r *http.Request) {
 
 	channel := make(chan imageDatabaseResponse)
 
-	go getImagesMetadataFromDatabase(filter, opts, channel)
+	go getImagesMetadataFromDatabase(*filter, opts, channel)
 
 	res := <-channel
 

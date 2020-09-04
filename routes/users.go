@@ -32,7 +32,7 @@ func createUser(user model.User, channel chan *database.InsertResponse) {
 }
 
 /**
-	Gets users from the database.
+	Gets users from the database according to the given filter and projection.
  */
 func getUsers(filter interface{}, projection interface{}, channel chan []findUserResponse) {
 	var opts *options.FindOptions = nil
@@ -110,10 +110,10 @@ func verifyUserHandle(userHandle string) bool {
 
 /**
 Verifies if password meets the following criteria:
-- At least 8 characters
-- 1 Uppercase
-- 1 Lowercase
-- 1 Digit
+	- At least 8 characters
+	- 1 Uppercase
+	- 1 Lowercase
+	- 1 Digit
 */
 func verifyPassword(password string) bool {
 	hasDigit, hasUppercase, hasLowerCase := false, false, false
@@ -139,12 +139,12 @@ func verifyPassword(password string) bool {
 }
 
 /**
-	Handles sign up. Takes in a name, email and password, verifies the inputs, and creates the users.
+	Handles sign up. Takes in a name, email, userhandle and password, verifies the inputs, and creates the user.
 
 	Returns:
 	- 200: User was created. Returns ID.
-	- 400: If any complexity requirement was not met, or an invalid form was sent.
-	- 409: Conflict, if the user was already registered.
+	- 400: If any complexity requirement was not met, an invalid email was sent, or an invalid form was sent.
+	- 409: Conflict, if the user was already registered with the email or userhandle.
 	- 500: If there is an error on the server (Database error, etc).
  */
 func handleSignUp(w http.ResponseWriter, r *http.Request) {
@@ -209,8 +209,8 @@ func handleSignUp(w http.ResponseWriter, r *http.Request) {
 	Handles a login request.
 
 	Returns:
-	- 200: OK, if the username and password match. Will return a JWT along with the expiry date and userinfo.
-	- 404: If the user was not found, or the username and password don't match.
+	- 200: OK, if the username and password match. Will return the userinfo, and set userinfo and JWT cookies
+	- 404: If the user was not found, or the username and password don't match. (there is no difference here.)
 	- 500: If there is an internal server error.
  */
 func handleLogin(w http.ResponseWriter, r *http.Request) {
