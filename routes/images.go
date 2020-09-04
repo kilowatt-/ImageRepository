@@ -35,7 +35,6 @@ type imageDatabaseResponse struct {
 
 var publicFilter = bson.D{{"accessLevel", "public"}}
 var awsSession *session.Session = nil
-var s3Client *s3.S3 = nil
 var s3Uploader *s3manager.Uploader = nil
 var s3Downloader *s3manager.Downloader = nil
 
@@ -246,87 +245,89 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 	const uploadNonImageFileTypeErr = "Uploaded non-image file type"
 	parseFormErr := r.ParseMultipartForm(10 << 20)
 	// Maximum total form data size: 10MB.
+
 	if parseFormErr != nil {
 		http.Error(w, parseFormErr.Error(), http.StatusBadRequest)
-	} else {
-		file, fileHeader, formFileErr := r.FormFile("file")
-
-		defer file.Close()
-
-		if formFileErr != nil {
-			http.Error(w, "Error parsing file", http.StatusBadRequest)
-			return
-		}
-
-		contentType := fileHeader.Header.Get("Content-Type")
-
-		if !validateAcceptableMIMEType(contentType) {
-			http.Error(w, uploadNonImageFileTypeErr, http.StatusBadRequest)
-			return
-		}
-
-		buf := bytes.NewBuffer(nil)
-
-		if _, err := io.Copy(buf, file); err != nil {
-			sendInternalServerError(w)
-			return
-		}
-
-		if !validateAcceptableMIMEType(http.DetectContentType(buf.Bytes())) {
-			http.Error(w, uploadNonImageFileTypeErr, http.StatusBadRequest)
-			return
-		}
-
-		authorID := getUserIDFromToken(r)
-		accessLevel := r.FormValue("accessLevel")
-		accessListIDsString := r.FormValue("accessListIDs")
-		caption := r.FormValue("caption")
-
-		var accessListIDs []string
-
-		jsonParseErr := json.Unmarshal([]byte(accessListIDsString), &accessListIDs)
-
-		if jsonParseErr != nil {
-			log.Println("passed empty access List IDs")
-			accessListIDs = []string{}
-		}
-
-		image := model.Image{
-			AuthorID:      authorID,
-			AccessLevel:   accessLevel,
-			Caption:       caption,
-			UploadDate:    time.Now(),
-			AccessListIDs: accessListIDs,
-			Likes:         []string{},
-		}
-
-		channel := make(chan *database.InsertResponse)
-
-		go insertImage(image, channel)
-
-		insertResponse := <-channel
-
-		if insertResponse.Err != nil {
-			sendInternalServerError(w)
-			return
-		}
-		id := insertResponse.ID
-
-		_, uploadErr := s3Uploader.Upload(&s3manager.UploadInput{
-			Bucket: aws.String(bucketName),
-			Key:    aws.String(id),
-			Body:   file,
-		})
-
-		if uploadErr != nil {
-			sendInternalServerError(w)
-			return
-		}
-		insertResponse.Err = nil
-		w.WriteHeader(200)
-		jsonResponse, _ := json.Marshal(insertResponse)
-		_, _ = w.Write(jsonResponse)
+		return
 	}
+
+	file, fileHeader, formFileErr := r.FormFile("file")
+
+	defer file.Close()
+
+	if formFileErr != nil {
+		http.Error(w, "Error parsing file", http.StatusBadRequest)
+		return
+	}
+
+	contentType := fileHeader.Header.Get("Content-Type")
+
+	if !validateAcceptableMIMEType(contentType) {
+		http.Error(w, uploadNonImageFileTypeErr, http.StatusBadRequest)
+		return
+	}
+
+	buf := bytes.NewBuffer(nil)
+
+	if _, err := io.Copy(buf, file); err != nil {
+		sendInternalServerError(w)
+		return
+	}
+
+	if !validateAcceptableMIMEType(http.DetectContentType(buf.Bytes())) {
+		http.Error(w, uploadNonImageFileTypeErr, http.StatusBadRequest)
+		return
+	}
+
+	authorID := getUserIDFromToken(r)
+	accessLevel := r.FormValue("accessLevel")
+	accessListIDsString := r.FormValue("accessListIDs")
+	caption := r.FormValue("caption")
+
+	var accessListIDs []string
+
+	jsonParseErr := json.Unmarshal([]byte(accessListIDsString), &accessListIDs)
+
+	if jsonParseErr != nil {
+		log.Println("passed empty access List IDs")
+		accessListIDs = []string{}
+	}
+
+	image := model.Image{
+		AuthorID:      authorID,
+		AccessLevel:   accessLevel,
+		Caption:       caption,
+		UploadDate:    time.Now(),
+		AccessListIDs: accessListIDs,
+		Likes:         []string{},
+	}
+
+	channel := make(chan *database.InsertResponse)
+
+	go insertImage(image, channel)
+
+	insertResponse := <-channel
+
+	if insertResponse.Err != nil {
+		sendInternalServerError(w)
+		return
+	}
+	id := insertResponse.ID
+
+	_, uploadErr := s3Uploader.Upload(&s3manager.UploadInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(id),
+		Body:   file,
+	})
+
+	if uploadErr != nil {
+		sendInternalServerError(w)
+		return
+	}
+	insertResponse.Err = nil
+	w.WriteHeader(200)
+	jsonResponse, _ := json.Marshal(insertResponse)
+	_, _ = w.Write(jsonResponse)
 }
 
 func editImageACL(w http.ResponseWriter, r *http.Request) {
@@ -489,7 +490,6 @@ Initializes the AWS session, S3 Client S3 Uploader and S3 Downloader.
 */
 func initAWS() {
 	awsSession = session.Must(session.NewSessionWithOptions(session.Options{SharedConfigState: session.SharedConfigEnable}))
-	s3Client = s3.New(awsSession)
 	s3Uploader = s3manager.NewUploader(awsSession)
 	s3Downloader = s3manager.NewDownloader(awsSession)
 }
