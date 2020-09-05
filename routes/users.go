@@ -452,8 +452,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 		if res.err != nil {
 			if res.err.Error() == UserNotFound || res.err.Error() == PasswordNotMatching {
-				w.WriteHeader(http.StatusNotFound)
-				_, _ = w.Write([]byte("Provided email/password do not match"))
+				http.Error(w, "Provided email/password do not match", http.StatusNotFound)
 			} else {
 				sendInternalServerError(w)
 			}
@@ -472,7 +471,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 					sendInternalServerError(w)
 				} else {
 
-					jsonEncodedCookie := strings.ReplaceAll(string(jsonResponse), "\"", "'") // Have to do this to Set-Cookie with JSON.
+					jsonEncodedCookie := strings.ReplaceAll(string(jsonResponse), "\"", "'") // Have to do this to Set-Cookie in psuedo-JSON format.
 
 					http.SetCookie(w, &http.Cookie{
 						Name:       "token",

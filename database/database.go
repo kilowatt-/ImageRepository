@@ -40,7 +40,7 @@ type DeleteResponse struct {
 	Err error
 }
 
-func DeleteMany(collectionName string, filter interface{}, opts *options.DeleteOptions) *DeleteResponse {
+func Delete(collectionName string, filter interface{}, opts *options.DeleteOptions) *DeleteResponse {
 	if client != nil {
 		if opts == nil {
 			opts = &options.DeleteOptions{}
@@ -142,56 +142,6 @@ func InsertOne(collectionName string, object interface{}, opts *options.InsertOn
 	}
 
 	return &InsertResponse{"", errors.New("MongoDB client not initialized yet")}
-}
-
-func FindOneAndUpdate(collectionName string, filter interface{}, update bson.D, opts *options.FindOneAndUpdateOptions) *FindOneResponse {
-	if client != nil {
-
-		if opts == nil {
-			opts = &options.FindOneAndUpdateOptions{}
-		}
-
-		collection := client.Database(dbName).Collection(collectionName)
-
-		var result bson.M
-
-		err := collection.FindOneAndUpdate(context.Background(), filter, update, opts).Decode(&result)
-
-		return &FindOneResponse{
-			Result: result,
-			Err: err,
-		}
-	}
-
-	return &FindOneResponse{nil, errors.New("MongoDB client not initialized yet")}
-}
-
-func FindOneAndDelete(collectionName string, filter interface{}, opts *options.FindOneAndDeleteOptions) *FindOneResponse {
-	if client != nil {
-
-		if opts == nil {
-			opts = &options.FindOneAndDeleteOptions{}
-		}
-
-		collection := client.Database(dbName).Collection(collectionName)
-
-		var result bson.M
-
-		if err := collection.FindOneAndDelete(context.Background(), filter, opts).Decode(&result); err != nil {
-			if err == mongo.ErrNoDocuments {
-				return &FindOneResponse{nil, nil}
-			} else {
-				return &FindOneResponse{bson.M{}, err}
-			}
-		}
-
-		return &FindOneResponse{
-			Result: result,
-			Err: nil,
-		}
-	}
-
-	return &FindOneResponse{nil, errors.New("MongoDB client not initialized yet")}
 }
 
 func FindOne(collectionName string, filter interface{}, opts *options.FindOneOptions) *FindOneResponse {
