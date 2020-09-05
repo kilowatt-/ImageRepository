@@ -211,13 +211,45 @@ func getHexImageIDFromRequest(r *http.Request) (*primitive.ObjectID, error) {
 }
 
 
+type acl struct {
+	Add    []string `json:"add,omitempty" bson:"add,omitempty"`
+	Remove []string `json:"remove,omitempty" bson:"remove,omitempty"`
+}
+
 /**
 	[PUT]
 
-	Adds the selected user IDs to
+	Adds the selected user IDs to the image's access control list (ACL)
+
+	JSON body parameters:
+		- _id: the image ID.
+		- add: an array of strings
+
+	Returns:
+		- 200 OK: All users were added/removed to the ACL.
+		- 400: Invalid image ID was sent, or both add and remove lists are empty.
+		- 404: At least one user in the add and remove lists does not exist in the database.
+		- 500:
  */
 func editImageACL(w http.ResponseWriter, r *http.Request) {
+	uid := getUserIDFromToken(r)
 
+	hex, err := getHexImageIDFromRequest(r)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	acl := &acl{}
+
+	err := json.NewDecoder(r.Body).Decode(&acl)
+
+	if err != nil {
+		log.Println(err)
+		routes.SendInternalServerError(w)
+		return
+	}
 }
 
 /**
@@ -226,7 +258,7 @@ func editImageACL(w http.ResponseWriter, r *http.Request) {
 Adds this user to the image's like list.
 
 JSON body parameters:
-	- id: the image ID.
+	- _id: the image ID.
 
 Returns:
 	- 200: Image liked successfully.
@@ -244,13 +276,13 @@ func likeImage(w http.ResponseWriter, r *http.Request) {
 Removes this user from the image's unlike list.
 
 Query parameters:
-	- id: the image ID.
+	- _id: the image ID.
 
 Returns:
 	- 200: Image liked successfully.
 	- 400: id not passed in.
 	- 404: Image not found, or user not authorised to view image. (no difference.)
-	- 409: User already liked image. No-op.
+	- 409: User already unliked image. No-op.
 */
 func unlikeImage(w http.ResponseWriter, r *http.Request) {
 	likeUnlikeImage(w, r, false)
