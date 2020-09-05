@@ -133,7 +133,7 @@ func appendAuthorsToImages(images []*model.Image, idMap map[string]bool) {
 	projection := bson.D{{"name", 1}, {"userHandle", 1}}
 	// Get author data
 	c := make(chan []findUserResponse)
-	go getUsers(filter, projection, c)
+	go getUsersFromDatabase(filter, projection, c)
 
 	res := <-c
 
@@ -165,7 +165,7 @@ func buildImageQuery(r *http.Request) (*bson.D, int64) {
 	before := time.Time{}
 	after := time.Time{}
 	var limit int64 = 10
-	user := ""
+	user := []string{}
 
 	if beforeQuery, beforeOK := r.URL.Query()["before"]; beforeOK && len(beforeQuery) > 0 && len(beforeQuery[0]) > 0 {
 		if conv, convErr := strconv.ParseInt(beforeQuery[0], 10, 64); convErr == nil {
@@ -183,29 +183,31 @@ func buildImageQuery(r *http.Request) (*bson.D, int64) {
 		}
 	}
 	if userQuery, userOK := r.URL.Query()["user"]; userOK && len(userQuery) > 0 && len(userQuery[0]) > 0 {
-		user = userQuery[0]
+		user = strings.Split(userQuery[0], ",")
 	}
 
 	var subFilters []interface{}
 
 	if !before.IsZero() {
-		subFilters = append(subFilters, bson.D{{"uploadDateTime", bson.D{{"$lte", primitive.NewDateTimeFromTime(before)}}}})
+		subFilters = append(subFilters, bson.D{{"uploadDateTime", bson.D{{"$lt", primitive.NewDateTimeFromTime(before)}}}})
 	}
 
 	if !after.IsZero() {
-		subFilters = append(subFilters, bson.D{{"uploadDateTime", bson.D{{"$gte", primitive.NewDateTimeFromTime(after)}}}})
+		subFilters = append(subFilters, bson.D{{"uploadDateTime", bson.D{{"$gt", primitive.NewDateTimeFromTime(after)}}}})
 	}
 
 	visibilityFilters := buildVisibilityFilters(loggedInUser)
 
-	if user != "" {
+	if len(user) > 0 {
 		subFilters = append(subFilters, bson.D{{"$and", []interface{}{
 			bson.D{{"$or", visibilityFilters}},
-			bson.D{{"authorid", user}},
+			bson.D{{"authorid", bson.D{{"$in", user}}}},
 		}}})
 	} else {
 		subFilters = append(subFilters, bson.D{{"$or", visibilityFilters}})
 	}
+
+	log.Println(subFilters)
 
 	return &bson.D{{"$and", subFilters}}, limit
 }
@@ -241,6 +243,9 @@ func getUserIDFromToken(r *http.Request) string {
 	return (*claims)["id"].(string)
 }
 
+/**
+	Inserts a new image record to the database, and uploads the file to our S3 bucket.
+ */
 func addNewImage(w http.ResponseWriter, r *http.Request) {
 	const uploadNonImageFileTypeErr = "Uploaded non-image file type"
 	parseFormErr := r.ParseMultipartForm(10 << 20)
@@ -330,6 +335,11 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(jsonResponse)
 }
 
+/**
+	[PUT]
+
+	Adds the selected user IDs to
+ */
 func editImageACL(w http.ResponseWriter, r *http.Request) {
 
 }
@@ -505,7 +515,7 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 		- before: UNIX time stamp representing the latest image that can be uploaded.
 		- after: UNIX time stamp repesenting the earliest image that should be fetched.
 		- limit: integer. the limit on the number of images to fetch. Default 10 if not specified.
-		- user: userID. Gets images from a particular user.
+		- user: comma-separated string. Gets images from particular user(s).
 
 	Returns: (application/json)
 		- 200: With list of images that match search criteria.
