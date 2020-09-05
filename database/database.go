@@ -58,7 +58,6 @@ func Delete(collectionName string, filter interface{}, opts *options.DeleteOptio
 	}
 
 	return &DeleteResponse{-1, errors.New("MongoDB client not initialized yet")}
-
 }
 
 func DeleteOne(collectionName string, filter interface{}, opts *options.DeleteOptions) *DeleteResponse {
@@ -82,7 +81,7 @@ func DeleteOne(collectionName string, filter interface{}, opts *options.DeleteOp
 	return &DeleteResponse{-1, errors.New("MongoDB client not initialized yet")}
 }
 
-func Update(collectionName string, filter interface{}, update bson.D, opts *options.UpdateOptions) (*UpdateResponse) {
+func Update(collectionName string, filter interface{}, update bson.D, opts *options.UpdateOptions) *UpdateResponse {
 	if client != nil {
 		if opts == nil {
 			opts = &options.UpdateOptions{}
@@ -130,9 +129,13 @@ func UpdateOne(collectionName string, filter interface{}, update bson.D, opts *o
 
 func InsertOne(collectionName string, object interface{}, opts *options.InsertOneOptions) *InsertResponse {
 	if client != nil {
+		if opts == nil {
+			opts = &options.InsertOneOptions{}
+		}
+
 		collection := client.Database(dbName).Collection(collectionName)
 
-		result, err := collection.InsertOne(context.Background(), object)
+		result, err := collection.InsertOne(context.Background(), object, opts)
 
 		if err != nil {
 			return &InsertResponse{"", err}

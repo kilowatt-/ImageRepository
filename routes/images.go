@@ -26,6 +26,8 @@ import (
 )
 
 const bucketName = "imgrepository-cdn"
+const invalidImageId = "invalid image id"
+const imageNotFound = "image not found"
 
 type imageDatabaseResponse struct {
 	images    []*model.Image
@@ -71,6 +73,28 @@ func getOneImage(filter bson.D, opts *options.FindOneOptions, channel chan image
 
 		channel <- imageDatabaseResponse{images: imageList, err: nil}
 	}
+}
+
+func like(userid string, imageid primitive.ObjectID, channel chan *database.UpdateResponse) {
+	filter := bson.D{{"$and", []bson.D{
+		{{"_id", imageid}},
+		{{"$or", buildVisibilityFilters(userid)}},
+	}}}
+
+	update := bson.D{{"$addToSet", bson.D{{"likes", userid}}}}
+
+	channel <- database.UpdateOne("images", filter, update, nil)
+}
+
+func unlike(userid string, imageid primitive.ObjectID, channel chan *database.UpdateResponse) {
+	filter := bson.D{{"$and", []bson.D{
+		{{"_id", imageid}},
+		{{"$or", buildVisibilityFilters(userid)}},
+	}}}
+
+	update := bson.D{{"$pull", bson.D{{"likes", userid}}}}
+
+	channel <- database.UpdateOne("images", filter, update, nil)
 }
 
 func getImagesMetadataFromDatabase(filter bson.D, opts *options.FindOptions, channel chan imageDatabaseResponse) {
@@ -207,8 +231,6 @@ func buildImageQuery(r *http.Request) (*bson.D, int64) {
 		subFilters = append(subFilters, bson.D{{"$or", visibilityFilters}})
 	}
 
-	log.Println(subFilters)
-
 	return &bson.D{{"$and", subFilters}}, limit
 }
 
@@ -335,6 +357,59 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(jsonResponse)
 }
 
+func likeUnlikeImage(w http.ResponseWriter, r *http.Request, isLike bool) {
+	uid := getUserIDFromToken(r)
+
+	image := &model.Image{}
+
+	err := json.NewDecoder(r.Body).Decode(&image)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if image.ID == "" {
+		http.Error(w, "no image ID passed in", http.StatusBadRequest)
+		return
+	}
+
+	hex, hexErr := primitive.ObjectIDFromHex(image.ID)
+
+	if hexErr != nil {
+		http.Error(w, invalidImageId, http.StatusBadRequest)
+		return
+	}
+
+	log.Println(hex)
+
+	channel := make(chan *database.UpdateResponse)
+
+	if isLike {
+		go like(uid, hex, channel)
+	} else {
+		go unlike(uid, hex, channel)
+	}
+
+	res := <- channel
+
+	if res.Matched == 0 {
+		http.Error(w, imageNotFound, http.StatusNotFound)
+		return
+	}
+
+	if res.Modified == 0 {
+		if isLike {
+			http.Error(w, "already liked image", http.StatusConflict)
+		} else {
+			http.Error(w, "already unliked image", http.StatusConflict)
+		}
+		return
+	}
+
+	w.WriteHeader(200)
+}
+
 /**
 	[PUT]
 
@@ -349,17 +424,17 @@ func editImageACL(w http.ResponseWriter, r *http.Request) {
 
 Adds this user to the image's like list.
 
-Query parameters:
+JSON body parameters:
 	- id: the image ID.
 
 Returns:
 	- 200: Image liked successfully.
-	- 400: id not passed in.
+	- 400: id not passed in, or invalid id passed in
 	- 404: Image not found, or user not authorised to view image. (no difference.)
 	- 409: User already liked image. No-op.
 */
 func likeImage(w http.ResponseWriter, r *http.Request) {
-
+	likeUnlikeImage(w, r, true)
 }
 
 /**
@@ -377,7 +452,7 @@ Returns:
 	- 409: User already liked image. No-op.
 */
 func unlikeImage(w http.ResponseWriter, r *http.Request) {
-
+	likeUnlikeImage(w, r, false)
 }
 
 /**
