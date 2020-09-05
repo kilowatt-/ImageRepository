@@ -96,6 +96,43 @@ func getUserIDFromToken(r *http.Request) string {
 	return (*claims)["id"].(string)
 }
 
+func likeUnlikeImage(w http.ResponseWriter, r *http.Request, isLike bool) {
+	uid := getUserIDFromToken(r)
+
+	hex, err := getHexImageIDFromRequest(r)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	channel := make(chan *database.UpdateResponse)
+
+	if isLike {
+		go like(uid, *hex, channel)
+	} else {
+		go unlike(uid, *hex, channel)
+	}
+
+	res := <-channel
+
+	if res.Matched == 0 {
+		http.Error(w, imageNotFound, http.StatusNotFound)
+		return
+	}
+
+	if res.Modified == 0 {
+		if isLike {
+			http.Error(w, "already liked image", http.StatusConflict)
+		} else {
+			http.Error(w, "already unliked image", http.StatusConflict)
+		}
+		return
+	}
+
+	w.WriteHeader(200)
+}
+
 /**
 	Inserts a new image record to the database, and uploads the file to our S3 bucket.
  */
@@ -518,3 +555,6 @@ func ServeImageRoutes(r *mux.Router) {
 	s.HandleFunc("/unlikeImage", unlikeImage).Methods("DELETE")
 	s.HandleFunc("/deleteAllImages", deleteAllImages).Methods("DELETE")
 }
+
+
+

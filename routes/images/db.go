@@ -7,7 +7,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"net/http"
 )
 
 func deleteAllImagesFromDatabase(userid string, channel chan *database.DeleteResponse) {
@@ -138,42 +137,5 @@ func appendAuthorsToImages(images []*model.Image, idMap map[string]bool) {
 		cur := images[i]
 		cur.SetAuthor(userMap[cur.AuthorID])
 	}
-}
-
-func likeUnlikeImage(w http.ResponseWriter, r *http.Request, isLike bool) {
-	uid := getUserIDFromToken(r)
-
-	hex, err := getHexImageIDFromRequest(r)
-
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	channel := make(chan *database.UpdateResponse)
-
-	if isLike {
-		go like(uid, *hex, channel)
-	} else {
-		go unlike(uid, *hex, channel)
-	}
-
-	res := <-channel
-
-	if res.Matched == 0 {
-		http.Error(w, imageNotFound, http.StatusNotFound)
-		return
-	}
-
-	if res.Modified == 0 {
-		if isLike {
-			http.Error(w, "already liked image", http.StatusConflict)
-		} else {
-			http.Error(w, "already unliked image", http.StatusConflict)
-		}
-		return
-	}
-
-	w.WriteHeader(200)
 }
 
