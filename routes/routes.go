@@ -2,11 +2,13 @@ package routes
 
 import (
 	"github.com/gorilla/mux"
+	"github.com/kilowatt-/ImageRepository/routes/images"
+	"github.com/kilowatt-/ImageRepository/routes/users"
 	"net/http"
 	"os"
 	"path/filepath"
 )
-func sendInternalServerError(w http.ResponseWriter) {
+func SendInternalServerError(w http.ResponseWriter) {
 	http.Error(w, "Internal server error", http.StatusInternalServerError)
 }
 func serveSPA(w http.ResponseWriter, r *http.Request) {
@@ -25,7 +27,7 @@ func serveSPA(w http.ResponseWriter, r *http.Request) {
 		if os.IsNotExist(err) {
 			http.ServeFile(w, r, filepath.Join(staticPath, indexPath))
 		} else if err != nil {
-			sendInternalServerError(w)
+			SendInternalServerError(w)
 		} else {
 			http.FileServer(http.Dir(staticPath)).ServeHTTP(w, r)
 		}
@@ -43,8 +45,8 @@ func serveFrontEnd(r *mux.Router) {
 }
 
 func RegisterRoutes(r *mux.Router) {
-	serveUserRoutes(r.PathPrefix("/api/users").Subrouter())
-	serveImageRoutes(r.PathPrefix("/api/images").Subrouter())
+	users.ServeUserRoutes(r.PathPrefix("/api/users").Subrouter())
+	images.ServeImageRoutes(r.PathPrefix("/api/images").Subrouter())
 	serveCatchAllAPIRoutes(r)
 	serveFrontEnd(r)
 }

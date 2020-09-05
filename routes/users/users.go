@@ -1,264 +1,19 @@
-package routes
+package users
 
 import (
 	"encoding/json"
-	"errors"
 	"github.com/gorilla/mux"
 	"github.com/kilowatt-/ImageRepository/database"
 	"github.com/kilowatt-/ImageRepository/model"
-	routes "github.com/kilowatt-/ImageRepository/routes/middleware"
+	"github.com/kilowatt-/ImageRepository/routes"
+	"github.com/kilowatt-/ImageRepository/routes/middleware"
 	"go.mongodb.org/mongo-driver/bson"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo/options"
 	"golang.org/x/crypto/bcrypt"
 	"log"
-	"math"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 )
-
-const UserNotFound = "user not found"
-const PasswordNotMatching = "password does not match"
-const InvalidHex = "invalid hex"
-
-type findUserResponse struct {
-	user model.User
-	err  error
-}
-
-func createUser(user model.User, channel chan *database.InsertResponse) {
-	res := database.InsertOne("users", user, nil)
-
-	channel <- res
-}
-
-/**
-Builds a user query based on the inputs to getUsers API endpoint.
-
-Returns the built query, the projection direction, the options, and an error (if present).
-*/
-func buildUserQueryAndOptions(r *http.Request) (*bson.D, *options.FindOptions, error) {
-	ids := []primitive.ObjectID{}
-	names := []string{}
-	handles := []string{}
-	var limit int64 = 100
-
-	namesExact := false
-	handlesExact := false
-	nameAsOrder := false
-	direction := -1
-
-	lt := ""
-	gt := ""
-
-	if idQuery, ok := r.URL.Query()["id"]; ok && len(idQuery) > 0 && len(idQuery[0]) > 0 {
-		idStrs := strings.Split(idQuery[0], ",")
-
-		for _, k := range idStrs {
-			hex, err := primitive.ObjectIDFromHex(k)
-
-			if err != nil {
-				return nil, nil, errors.New(InvalidHex)
-			}
-
-			ids = append(ids, hex)
-		}
-	}
-
-	if limitQuery, ok := r.URL.Query()["limit"]; ok && len(limitQuery) > 0 && len(limitQuery[0]) > 0 {
-		if parseLimit, err := strconv.ParseInt(limitQuery[0], 10, 64); err == nil {
-			limit = int64(math.Min(float64(parseLimit), float64(limit)))
-		}
-	}
-
-	if orderByQuery, ok := r.URL.Query()["orderBy"]; ok && len(orderByQuery) > 0 && len(orderByQuery[0]) > 0 {
-		nameAsOrder = orderByQuery[0] == "name"
-	}
-
-	if ascQuery, ok := r.URL.Query()["ascending"]; ok && len(ascQuery) > 0 && len(ascQuery[0]) > 0 && (ascQuery[0] == "Y" || ascQuery[0] == "y") {
-		direction = 1
-	}
-
-	opts := &options.FindOptions{Limit: &limit}
-
-	if nameAsOrder {
-		opts.SetSort(bson.D{{"name", direction}, {"userHandle", direction}})
-	} else {
-		opts.SetSort(bson.D{{"userHandle", direction}, {"name", direction}})
-	}
-
-	if len(ids) > 0 {
-		opts.SetLimit(int64(len(ids)))
-		query := &bson.D{{"_id", bson.D{{"$in", ids}}}}
-		return query, opts, nil
-	}
-
-	subQueries := []bson.D{{}}
-
-	if ltQuery, ok := r.URL.Query()["lt"]; ok && len(ltQuery) > 0 && len(ltQuery[0]) > 0 {
-		lt = ltQuery[0]
-	}
-
-	if gtQuery, ok := r.URL.Query()["gt"]; ok && len(gtQuery) > 0 && len(gtQuery[0]) > 0 {
-		gt = gtQuery[0]
-	}
-
-	if nameExactQuery, ok := r.URL.Query()["nameExact"]; ok && len(nameExactQuery) > 0 && len(nameExactQuery[0]) > 0 {
-		namesExact = nameExactQuery[0] == "y" || nameExactQuery[0] == "Y"
-	}
-
-	if userHandleExactQuery, ok := r.URL.Query()["userHandleExact"]; ok && len(userHandleExactQuery) > 0 && len(userHandleExactQuery[0]) > 0 {
-		handlesExact = userHandleExactQuery[0] == "y" || userHandleExactQuery[0] == "Y"
-	}
-
-	if namesQuery, ok := r.URL.Query()["name"]; ok && len(namesQuery) > 0 && len(namesQuery[0]) > 0 {
-		names = strings.Split(namesQuery[0], ",")
-
-		baseQuery := bson.D{{"name", bson.D{{"$in", names}}}}
-
-		if !namesExact {
-			namesRegEx := make([]primitive.Regex, len(names))
-
-			for i, k := range names {
-				namesRegEx[i] = primitive.Regex{
-					Pattern: k,
-					Options: "i",
-				}
-			}
-
-			baseQuery = bson.D{{"name", bson.D{{"$in", namesRegEx}}}}
-		}
-
-		if nameAsOrder {
-			q := []bson.D{baseQuery}
-
-			if lt != "" {
-				q = append(q, bson.D{{"name", bson.D{{"$lt", lt}}}})
-			}
-
-			if gt != "" {
-				q = append(q, bson.D{{"name", bson.D{{"$gt", gt}}}})
-			}
-
-			subQueries = append(subQueries, bson.D{{"$and", q}})
-		} else {
-			subQueries = append(subQueries, baseQuery)
-		}
-	}
-
-	if handlesQuery, ok := r.URL.Query()["userHandle"]; ok && len(handlesQuery) > 0 && len(handlesQuery[0]) > 0 {
-		handles = strings.Split(handlesQuery[0], ",")
-		baseQuery := bson.D{{"userHandle", bson.D{{"$in", handles}}}}
-
-		if !handlesExact {
-			handlesRegEx := make([]primitive.Regex, len(handles))
-
-			for i, k := range handles {
-				handlesRegEx[i] = primitive.Regex{
-					Pattern: k,
-					Options: "i",
-				}
-			}
-
-			baseQuery = bson.D{{"userHandle", bson.D{{"$in", handlesRegEx}}}}
-		}
-
-		if !nameAsOrder {
-			q := []bson.D{baseQuery}
-
-			if lt != "" {
-				q = append(q, bson.D{{"userHandle", bson.D{{"$lt", lt}}}})
-			}
-
-			if gt != "" {
-				q = append(q, bson.D{{"userHandle", bson.D{{"$gt", gt}}}})
-			}
-
-			subQueries = append(subQueries, bson.D{{"$and", q}})
-		} else {
-			subQueries = append(subQueries, baseQuery)
-		}
-
-	}
-
-	query := &bson.D{{"$and", subQueries}}
-
-	return query, opts, nil
-}
-
-/**
-Gets users from the database according to the given filter and projection.
-*/
-func getUsersFromDatabase(filter interface{}, projection interface{}, channel chan []findUserResponse, optionsList ...*options.FindOptions) {
-	opts := &options.FindOptions{}
-
-	if projection != nil {
-		opts.SetProjection(projection)
-	}
-
-	if len(optionsList) > 0 {
-		for _, o := range optionsList {
-			opts = options.MergeFindOptions(opts, o)
-		}
-	}
-
-	var userArray = []findUserResponse{}
-
-	res := database.Find("users", filter, opts)
-
-	if res.Err != nil {
-		userArray = append(userArray, findUserResponse{model.User{}, res.Err})
-	} else {
-		for i := 0; i < len(res.Result); i++ {
-			var user model.User
-			bsonBytes, _ := bson.Marshal(res.Result[i])
-			_ = bson.Unmarshal(bsonBytes, &user)
-
-			userArray = append(userArray, findUserResponse{user, nil})
-		}
-	}
-
-	channel <- userArray
-}
-
-/**
-Gets user from database based on email and password.
-
-If user is not found, an error will be returned.
-*/
-func getUserWithLogin(email string, password string, channel chan findUserResponse) {
-	filter := bson.D{{"email", email}}
-
-	blankUser := model.User{
-		Name:     "",
-		Email:    "",
-		Password: nil,
-	}
-
-	response := database.FindOne("users", filter, nil)
-
-	if response.Err != nil {
-		channel <- findUserResponse{user: blankUser, err: response.Err}
-	} else if len(response.Result) == 0 {
-		channel <- findUserResponse{user: blankUser, err: errors.New(UserNotFound)}
-	} else {
-		var user model.User
-
-		bsonBytes, _ := bson.Marshal(response.Result)
-
-		_ = bson.Unmarshal(bsonBytes, &user)
-
-		pwdErr := bcrypt.CompareHashAndPassword(user.Password, []byte(password))
-
-		if pwdErr != nil {
-			channel <- findUserResponse{user: blankUser, err: errors.New(PasswordNotMatching)}
-		} else {
-			channel <- findUserResponse{user, nil}
-		}
-	}
-}
 
 func verifyEmail(email string) bool {
 	matched, err := regexp.MatchString("(?:[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*|\"(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21\\x23-\\x5b\\x5d-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])*\")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\\[(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?|[a-z0-9-]*[a-z0-9]:(?:[\\x01-\\x08\\x0b\\x0c\\x0e-\\x1f\\x21-\\x5a\\x53-\\x7f]|\\\\[\\x01-\\x09\\x0b\\x0c\\x0e-\\x7f])+)\\])", email)
@@ -327,29 +82,29 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 		if err.Error() == InvalidHex {
 			http.Error(w, "invalid ID passeed in", http.StatusBadRequest)
 		} else {
-			sendInternalServerError(w)
+			routes.SendInternalServerError(w)
 		}
 		return
 	}
 
 	projection := bson.D{{"userHandle", 1}, {"name", 1}}
 
-	channel := make(chan []findUserResponse)
+	channel := make(chan []FindUserResponse)
 
-	go getUsersFromDatabase(query, projection, channel, opts)
+	go GetUsersFromDatabase(query, projection, channel, opts)
 
 	res := <-channel
 
-	if len(res) == 1 && res[0].err != nil {
-		log.Println(res[0].err)
-		sendInternalServerError(w)
+	if len(res) == 1 && res[0].Err != nil {
+		log.Println(res[0].Err)
+		routes.SendInternalServerError(w)
 		return
 	}
 
 	users := []model.User{}
 
 	for _, k := range res {
-		users = append(users, k.user)
+		users = append(users, k.User)
 	}
 
 	jsonResponse, _ := json.Marshal(users)
@@ -411,7 +166,7 @@ func handleSignUp(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Email "+email+" already registered", http.StatusConflict)
 			}
 		} else {
-			sendInternalServerError(w)
+			routes.SendInternalServerError(w)
 		}
 
 	} else {
@@ -445,30 +200,30 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		email := r.FormValue("email")
 		password := r.FormValue("password")
 
-		channel := make(chan findUserResponse)
-		go getUserWithLogin(email, password, channel)
+		channel := make(chan FindUserResponse)
+		go GetUserWithLogin(email, password, channel)
 
 		res := <-channel
 
-		if res.err != nil {
-			if res.err.Error() == UserNotFound || res.err.Error() == PasswordNotMatching {
+		if res.Err != nil {
+			if res.Err.Error() == UserNotFound || res.Err.Error() == PasswordNotMatching {
 				http.Error(w, "Provided email/password do not match", http.StatusNotFound)
 			} else {
-				sendInternalServerError(w)
+				routes.SendInternalServerError(w)
 			}
 		} else {
-			token, expiry, jwtErr := routes.CreateLoginToken(res.user)
+			token, expiry, jwtErr := middleware.CreateLoginToken(res.User)
 
 			if jwtErr != nil {
 				log.Println(jwtErr)
-				sendInternalServerError(w)
+				routes.SendInternalServerError(w)
 			} else {
-				res.user.Password = nil
-				jsonResponse, jsonErr := json.Marshal(res.user)
+				res.User.Password = nil
+				jsonResponse, jsonErr := json.Marshal(res.User)
 
 				if jsonErr != nil {
 					log.Println(jsonErr)
-					sendInternalServerError(w)
+					routes.SendInternalServerError(w)
 				} else {
 
 					jsonEncodedCookie := strings.ReplaceAll(string(jsonResponse), "\"", "'") // Have to do this to Set-Cookie in psuedo-JSON format.
@@ -503,7 +258,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func serveUserRoutes(r *mux.Router) {
+func ServeUserRoutes(r *mux.Router) {
 	r.HandleFunc("/signup", handleSignUp).Methods("POST")
 	r.HandleFunc("/login", handleLogin).Methods("POST")
 	r.HandleFunc("/getUsers", getUsers).Methods("GET")

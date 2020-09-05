@@ -1,8 +1,9 @@
-package routes
+package images
 
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
@@ -11,7 +12,8 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/kilowatt-/ImageRepository/database"
 	"github.com/kilowatt-/ImageRepository/model"
-	routes "github.com/kilowatt-/ImageRepository/routes/middleware"
+	"github.com/kilowatt-/ImageRepository/routes"
+	"github.com/kilowatt-/ImageRepository/routes/middleware"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -20,7 +22,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -37,6 +38,7 @@ type imageDatabaseResponse struct {
 
 var publicFilter = bson.D{{"accessLevel", "public"}}
 var awsSession *session.Session = nil
+var s3Instance *s3.S3 = nil
 var s3Uploader *s3manager.Uploader = nil
 var s3Downloader *s3manager.Downloader = nil
 
@@ -46,84 +48,6 @@ var mimeSet = map[string]bool{
 	"image/jpeg": true,
 	"image/png":  true,
 	"image/webp": true,
-}
-
-func insertImage(image model.Image, channel chan *database.InsertResponse) {
-	res := database.InsertOne("images", image, nil)
-	channel <- res
-}
-
-func getOneImage(filter bson.D, opts *options.FindOneOptions, channel chan imageDatabaseResponse) {
-	res := database.FindOne("images", filter, opts)
-
-	if res.Err != nil {
-		channel <- imageDatabaseResponse{images: nil, err: res.Err}
-	} else {
-		imageList := []*model.Image{}
-
-		if res.Result != nil {
-			image := model.Image{}
-
-			bsonBytes, _ := bson.Marshal(res.Result)
-
-			_ = bson.Unmarshal(bsonBytes, &image)
-
-			imageList = append(imageList, &image)
-		}
-
-		channel <- imageDatabaseResponse{images: imageList, err: nil}
-	}
-}
-
-func like(userid string, imageid primitive.ObjectID, channel chan *database.UpdateResponse) {
-	filter := bson.D{{"$and", []bson.D{
-		{{"_id", imageid}},
-		{{"$or", buildVisibilityFilters(userid)}},
-	}}}
-
-	update := bson.D{{"$addToSet", bson.D{{"likes", userid}}}}
-
-	channel <- database.UpdateOne("images", filter, update, nil)
-}
-
-func unlike(userid string, imageid primitive.ObjectID, channel chan *database.UpdateResponse) {
-	filter := bson.D{{"$and", []bson.D{
-		{{"_id", imageid}},
-		{{"$or", buildVisibilityFilters(userid)}},
-	}}}
-
-	update := bson.D{{"$pull", bson.D{{"likes", userid}}}}
-
-	channel <- database.UpdateOne("images", filter, update, nil)
-}
-
-func getImagesMetadataFromDatabase(filter bson.D, opts *options.FindOptions, channel chan imageDatabaseResponse) {
-	res := database.Find("images", filter, opts)
-
-	imageList := []*model.Image{}
-	var authorIDMap = make(map[string]bool)
-
-	if res.Err != nil {
-		channel <- imageDatabaseResponse{
-			images:    nil,
-			userIDMap: nil,
-			err:       res.Err,
-		}
-		return
-	} else {
-		for i := 0; i < len(res.Result); i++ {
-			image := model.Image{}
-
-			bsonBytes, _ := bson.Marshal(res.Result[i])
-
-			_ = bson.Unmarshal(bsonBytes, &image)
-
-			authorIDMap[image.AuthorID] = true
-			imageList = append(imageList, &image)
-		}
-	}
-
-	channel <- imageDatabaseResponse{imageList, &authorIDMap, nil}
 }
 
 func validateAcceptableMIMEType(mimeType string) bool {
@@ -141,99 +65,6 @@ func buildVisibilityFilters(userid string) []interface{} {
 	return filters
 }
 
-// Appends author to each image in the list.
-func appendAuthorsToImages(images []*model.Image, idMap map[string]bool) {
-	userIDs := make([]primitive.ObjectID, len(idMap))
-
-	i := 0
-
-	for k := range idMap {
-		hex, _ := primitive.ObjectIDFromHex(k)
-		userIDs[i] = hex
-		i++
-	}
-
-	filter := bson.D{{"_id", bson.D{{"$in", userIDs}}}}
-	projection := bson.D{{"name", 1}, {"userHandle", 1}}
-	// Get author data
-	c := make(chan []findUserResponse)
-	go getUsersFromDatabase(filter, projection, c)
-
-	res := <-c
-
-	if len(res) == 1 && res[0].err != nil {
-		return
-	}
-
-	userMap := make(map[string]model.User)
-
-	for i := 0; i < len(res); i++ {
-		cur := res[i].user
-		userMap[cur.ID] = cur
-	}
-
-	for i := 0; i < len(images); i++ {
-		cur := images[i]
-		cur.SetAuthor(userMap[cur.AuthorID])
-	}
-}
-
-/**
-Builds the image query based on the parameters passed in the request.
-
-Returns a BSON Document representing the database query to be built, and a number that represents the limit.
-*/
-func buildImageQuery(r *http.Request) (*bson.D, int64) {
-	loggedInUser := getUserIDFromTokenNotStrictValidation(r)
-
-	before := time.Time{}
-	after := time.Time{}
-	var limit int64 = 10
-	user := []string{}
-
-	if beforeQuery, beforeOK := r.URL.Query()["before"]; beforeOK && len(beforeQuery) > 0 && len(beforeQuery[0]) > 0 {
-		if conv, convErr := strconv.ParseInt(beforeQuery[0], 10, 64); convErr == nil {
-			before = time.Unix(conv, 0)
-		}
-	}
-	if afterQuery, afterOK := r.URL.Query()["after"]; afterOK && len(afterQuery) > 0 && len(afterQuery[0]) > 0 {
-		if conv, convErr := strconv.ParseInt(afterQuery[0], 10, 64); convErr == nil {
-			after = time.Unix(conv, 0)
-		}
-	}
-	if limitQuery, limitOK := r.URL.Query()["limit"]; limitOK && len(limitQuery) > 0 && len(limitQuery[0]) > 0 {
-		if conv, convErr := strconv.ParseInt(limitQuery[0], 10, 64); convErr == nil {
-			limit = conv
-		}
-	}
-	if userQuery, userOK := r.URL.Query()["user"]; userOK && len(userQuery) > 0 && len(userQuery[0]) > 0 {
-		user = strings.Split(userQuery[0], ",")
-	}
-
-	var subFilters []interface{}
-
-	if !before.IsZero() {
-		subFilters = append(subFilters, bson.D{{"uploadDateTime", bson.D{{"$lt", primitive.NewDateTimeFromTime(before)}}}})
-	}
-
-	if !after.IsZero() {
-		subFilters = append(subFilters, bson.D{{"uploadDateTime", bson.D{{"$gt", primitive.NewDateTimeFromTime(after)}}}})
-	}
-
-	visibilityFilters := buildVisibilityFilters(loggedInUser)
-
-	if len(user) > 0 {
-		subFilters = append(subFilters, bson.D{{"$and", []interface{}{
-			bson.D{{"$or", visibilityFilters}},
-			bson.D{{"authorid", bson.D{{"$in", user}}}},
-		}}})
-	} else {
-		subFilters = append(subFilters, bson.D{{"$or", visibilityFilters}})
-	}
-
-	return &bson.D{{"$and", subFilters}}, limit
-}
-
 /**
 Gets user ID from the token.
 
@@ -244,7 +75,7 @@ func getUserIDFromTokenNotStrictValidation(r *http.Request) string {
 	cookie, err := r.Cookie("token")
 	if err == nil {
 		token := cookie.Value
-		valid, vErr := routes.VerifyJWT(token)
+		valid, vErr := middleware.VerifyJWT(token)
 
 		if valid && vErr == nil {
 			return getUserIDFromToken(r)
@@ -297,7 +128,7 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 	buf := bytes.NewBuffer(nil)
 
 	if _, err := io.Copy(buf, file); err != nil {
-		sendInternalServerError(w)
+		routes.SendInternalServerError(w)
 		return
 	}
 
@@ -336,7 +167,7 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 	insertResponse := <-channel
 
 	if insertResponse.Err != nil {
-		sendInternalServerError(w)
+		routes.SendInternalServerError(w)
 		return
 	}
 	id := insertResponse.ID
@@ -348,7 +179,7 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if uploadErr != nil {
-		sendInternalServerError(w)
+		routes.SendInternalServerError(w)
 		return
 	}
 	insertResponse.Err = nil
@@ -357,58 +188,28 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(jsonResponse)
 }
 
-func likeUnlikeImage(w http.ResponseWriter, r *http.Request, isLike bool) {
-	uid := getUserIDFromToken(r)
-
+func getHexImageIDFromRequest(r *http.Request) (*primitive.ObjectID, error) {
 	image := &model.Image{}
 
 	err := json.NewDecoder(r.Body).Decode(&image)
 
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return nil, err
 	}
 
 	if image.ID == "" {
-		http.Error(w, "no image ID passed in", http.StatusBadRequest)
-		return
+		return nil, errors.New("image id not passed in")
 	}
 
 	hex, hexErr := primitive.ObjectIDFromHex(image.ID)
 
 	if hexErr != nil {
-		http.Error(w, invalidImageId, http.StatusBadRequest)
-		return
+		return nil, errors.New(invalidImageId)
 	}
 
-	log.Println(hex)
-
-	channel := make(chan *database.UpdateResponse)
-
-	if isLike {
-		go like(uid, hex, channel)
-	} else {
-		go unlike(uid, hex, channel)
-	}
-
-	res := <- channel
-
-	if res.Matched == 0 {
-		http.Error(w, imageNotFound, http.StatusNotFound)
-		return
-	}
-
-	if res.Modified == 0 {
-		if isLike {
-			http.Error(w, "already liked image", http.StatusConflict)
-		} else {
-			http.Error(w, "already unliked image", http.StatusConflict)
-		}
-		return
-	}
-
-	w.WriteHeader(200)
+	return &hex, nil
 }
+
 
 /**
 	[PUT]
@@ -466,10 +267,44 @@ Query parameters:
 Returns
 	- 200: Image deleted successfully.
 	- 400: Image ID was not passed in.
-	- 403: User does not have permission to delete image.
+	- 404: Image not found or user does not have permission to delete image. (no difference)
+	- 500: Internal server error
 */
 func deleteImage(w http.ResponseWriter, r *http.Request) {
+	uid := getUserIDFromToken(r)
 
+	hex, err := getHexImageIDFromRequest(r)
+
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	channel := make(chan *database.DeleteResponse)
+
+	go deleteImageFromDatabase(uid, *hex, channel)
+
+	res := <-channel
+
+	if res.Err != nil {
+		routes.SendInternalServerError(w)
+		return
+	}
+
+	if res.NumberDeleted == 0 {
+		http.Error(w, "image not found", http.StatusNotFound)
+		return
+	}
+
+	if _, err := s3Instance.DeleteObject(&s3.DeleteObjectInput{
+		Bucket: aws.String(bucketName),
+		Key: aws.String(hex.Hex()),
+	}); err != nil {
+		routes.SendInternalServerError(w)
+		return
+	}
+
+	w.WriteHeader(200)
 }
 
 /**
@@ -534,7 +369,7 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 	res := <-channel
 
 	if res.err != nil {
-		sendInternalServerError(w)
+		routes.SendInternalServerError(w)
 		return
 	}
 
@@ -547,7 +382,7 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		log.Println(err)
-		sendInternalServerError(w)
+		routes.SendInternalServerError(w)
 		return
 	}
 
@@ -563,7 +398,7 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Image not found", http.StatusNotFound)
 		} else {
 			log.Println(dlErr)
-			sendInternalServerError(w)
+			routes.SendInternalServerError(w)
 		}
 		return
 	}
@@ -572,7 +407,7 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 
 	if fileErr != nil {
 		log.Println(fileErr)
-		sendInternalServerError(w)
+		routes.SendInternalServerError(w)
 		return
 	}
 
@@ -611,7 +446,7 @@ func getImagesMetadata(w http.ResponseWriter, r *http.Request) {
 	res := <-channel
 
 	if res.err != nil {
-		sendInternalServerError(w)
+		routes.SendInternalServerError(w)
 		return
 	}
 
@@ -629,11 +464,12 @@ Initializes the AWS session, S3 Client S3 Uploader and S3 Downloader.
 */
 func initAWS() {
 	awsSession = session.Must(session.NewSessionWithOptions(session.Options{SharedConfigState: session.SharedConfigEnable}))
+	s3Instance = s3.New(awsSession)
 	s3Uploader = s3manager.NewUploader(awsSession)
 	s3Downloader = s3manager.NewDownloader(awsSession)
 }
 
-func serveImageRoutes(r *mux.Router) {
+func ServeImageRoutes(r *mux.Router) {
 	initAWS()
 
 	r.HandleFunc("/getImage", getImage).Methods("GET")
@@ -641,10 +477,10 @@ func serveImageRoutes(r *mux.Router) {
 
 	s := r.Methods("PUT", "DELETE", "PATCH").Subrouter()
 
-	s.Use(routes.JWTMiddleware)
+	s.Use(middleware.JWTMiddleware)
 
 	s.HandleFunc("/addImage", addNewImage).Methods("PUT")
-	s.HandleFunc("/deleteImage", deleteImage).Methods("DELETE")
+	s.HandleFunc("/deleteImageFromDatabase", deleteImage).Methods("DELETE")
 	s.HandleFunc("/editImageACL", editImageACL).Methods("PATCH")
 	s.HandleFunc("/likeImage", likeImage).Methods("PUT")
 	s.HandleFunc("/unlikeImage", unlikeImage).Methods("DELETE")
