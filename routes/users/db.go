@@ -67,20 +67,15 @@ If user is not found, an error will be returned.
 func GetUserWithLogin(email string, password string, channel chan FindUserResponse) {
 	filter := bson.D{{"email", email}}
 
-	blankUser := model.User{
-		Name:     "",
-		Email:    "",
-		Password: nil,
-	}
+	user := model.User{}
 
 	response := database.FindOne("users", filter, nil)
 
 	if response.Err != nil {
-		channel <- FindUserResponse{User: blankUser, Err: response.Err}
+		channel <- FindUserResponse{User: user, Err: response.Err}
 	} else if len(response.Result) == 0 {
-		channel <- FindUserResponse{User: blankUser, Err: errors.New(UserNotFound)}
+		channel <- FindUserResponse{User: user, Err: errors.New(UserNotFound)}
 	} else {
-		var user model.User
 
 		bsonBytes, _ := bson.Marshal(response.Result)
 
@@ -89,7 +84,7 @@ func GetUserWithLogin(email string, password string, channel chan FindUserRespon
 		pwdErr := bcrypt.CompareHashAndPassword(user.Password, []byte(password))
 
 		if pwdErr != nil {
-			channel <- FindUserResponse{User: blankUser, Err: errors.New(PasswordNotMatching)}
+			channel <- FindUserResponse{User: user, Err: errors.New(PasswordNotMatching)}
 		} else {
 			channel <- FindUserResponse{user, nil}
 		}

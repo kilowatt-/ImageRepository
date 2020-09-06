@@ -2,15 +2,14 @@ package routes
 
 import (
 	"github.com/gorilla/mux"
+	"github.com/kilowatt-/ImageRepository/routes/common"
 	"github.com/kilowatt-/ImageRepository/routes/images"
 	"github.com/kilowatt-/ImageRepository/routes/users"
 	"net/http"
 	"os"
 	"path/filepath"
 )
-func SendInternalServerError(w http.ResponseWriter) {
-	http.Error(w, "Internal server error", http.StatusInternalServerError)
-}
+
 func serveSPA(w http.ResponseWriter, r *http.Request) {
 	staticPath := "./client/build"
 	indexPath := "index.html"
@@ -27,7 +26,7 @@ func serveSPA(w http.ResponseWriter, r *http.Request) {
 		if os.IsNotExist(err) {
 			http.ServeFile(w, r, filepath.Join(staticPath, indexPath))
 		} else if err != nil {
-			SendInternalServerError(w)
+			common.SendInternalServerError(w)
 		} else {
 			http.FileServer(http.Dir(staticPath)).ServeHTTP(w, r)
 		}

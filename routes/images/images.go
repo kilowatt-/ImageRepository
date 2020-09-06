@@ -12,8 +12,10 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/kilowatt-/ImageRepository/database"
 	"github.com/kilowatt-/ImageRepository/model"
-	"github.com/kilowatt-/ImageRepository/routes"
+	"github.com/kilowatt-/ImageRepository/routes/common"
 	"github.com/kilowatt-/ImageRepository/routes/middleware"
+	"github.com/kilowatt-/ImageRepository/routes/users"
+	"github.com/kilowatt-/ImageRepository/util"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -48,6 +50,44 @@ var mimeSet = map[string]bool{
 	"image/jpeg": true,
 	"image/png":  true,
 	"image/webp": true,
+}
+
+func getHexIdArray(acl *acl) (*[]primitive.ObjectID, error) {
+
+	allowSet := make(map[primitive.ObjectID]bool)
+	rejectSet := make(map[primitive.ObjectID]bool)
+
+	for _, k := range acl.Add {
+		idHex, hexErr := primitive.ObjectIDFromHex(k)
+
+		if hexErr != nil {
+			return nil, errors.New( "invalid user id: "+k)
+		}
+
+		allowSet[idHex] = true
+	}
+
+	for _, k := range acl.Remove {
+		idHex, hexErr := primitive.ObjectIDFromHex(k)
+
+		if hexErr != nil {
+			return nil, errors.New( "invalid user id: "+k)
+		}
+
+		if _, exists := allowSet[idHex]; exists {
+			return nil, errors.New("user id present in both add and delete sets: " + k)
+		}
+
+		rejectSet[idHex] = true
+	}
+
+	idArray := make([]primitive.ObjectID, 0, len(allowSet) + len(rejectSet))
+
+	for k, _ := range allowSet {
+		idArray = append(idArray, k)
+	}
+
+	return &idArray, nil
 }
 
 func validateAcceptableMIMEType(mimeType string) bool {
@@ -130,10 +170,12 @@ func likeUnlikeImage(w http.ResponseWriter, r *http.Request, isLike bool) {
 		return
 	}
 
-	w.WriteHeader(200)
+	w.WriteHeader(http.StatusOK)
 }
 
 /**
+	[POST] form/multipart
+
 	Inserts a new image record to the database, and uploads the file to our S3 bucket.
  */
 func addNewImage(w http.ResponseWriter, r *http.Request) {
@@ -165,7 +207,7 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 	buf := bytes.NewBuffer(nil)
 
 	if _, err := io.Copy(buf, file); err != nil {
-		routes.SendInternalServerError(w)
+		common.SendInternalServerError(w)
 		return
 	}
 
@@ -204,7 +246,7 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 	insertResponse := <-channel
 
 	if insertResponse.Err != nil {
-		routes.SendInternalServerError(w)
+		common.SendInternalServerError(w)
 		return
 	}
 	id := insertResponse.ID
@@ -216,11 +258,11 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if uploadErr != nil {
-		routes.SendInternalServerError(w)
+		common.SendInternalServerError(w)
 		return
 	}
 	insertResponse.Err = nil
-	w.WriteHeader(200)
+	w.WriteHeader(http.StatusOK)
 	jsonResponse, _ := json.Marshal(insertResponse)
 	_, _ = w.Write(jsonResponse)
 }
@@ -247,8 +289,19 @@ func getHexImageIDFromRequest(r *http.Request) (*primitive.ObjectID, error) {
 	return &hex, nil
 }
 
+func getHexIDFromString(str string) (*primitive.ObjectID, error) {
+	hex, hexErr := primitive.ObjectIDFromHex(str)
+
+	if hexErr != nil {
+		return nil, errors.New(invalidImageId)
+	}
+
+	return &hex, nil
+}
+
 
 type acl struct {
+	ID		string	`json:"_id,omitempty", bson:"_id,omitempty"`
 	Add    []string `json:"add,omitempty" bson:"add,omitempty"`
 	Remove []string `json:"remove,omitempty" bson:"remove,omitempty"`
 }
@@ -260,34 +313,96 @@ type acl struct {
 
 	JSON body parameters:
 		- _id: the image ID.
-		- add: an array of strings
+		- add: an array of strings: the user IDs to add.
+		- remove: an array of strings: user IDs to remove from database.
 
 	Returns:
 		- 200 OK: All users were added/removed to the ACL.
-		- 400: Invalid image ID was sent, or both add and remove lists are empty.
-		- 404: At least one user in the add and remove lists does not exist in the database.
-		- 500:
+		- 204 No Content: ACL was not modified.
+		- 400: Invalid image ID was sent, at least one invalid user ID was passed in, same user ID was present in both add and delete lists, or both add and remove lists are empty.
+		- 404: At least one user in the add and remove lists does not exist in the database, or image not found.
+		- 500: Internal server error
  */
 func editImageACL(w http.ResponseWriter, r *http.Request) {
 	uid := getUserIDFromToken(r)
 
-	hex, err := getHexImageIDFromRequest(r)
+	acl := &acl{}
+
+	err := json.NewDecoder(r.Body).Decode(&acl)
+
+	acl.Add = util.RemoveDuplicatesFromStringArray(acl.Add)
+	acl.Remove = util.RemoveDuplicatesFromStringArray(acl.Remove)
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	acl := &acl{}
-
-	err := json.NewDecoder(r.Body).Decode(&acl)
+	hex, err := getHexIDFromString(acl.ID)
 
 	if err != nil {
-		log.Println(err)
-		routes.SendInternalServerError(w)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	if len(acl.Add) == 0 && len(acl.Remove) == 0 {
+		 http.Error(w, "no users passed to add/remove array", http.StatusBadRequest)
+		 return
+	}
+
+	idArray, idErr := getHexIdArray(acl)
+
+	if idErr != nil {
+		http.Error(w, idErr.Error(), http.StatusBadRequest)
+		return
+	}
+
+	usersFilter := bson.D{{"_id", bson.D{{"$in", idArray}}}}
+	usersChannel := make(chan []users.FindUserResponse)
+
+	go users.GetUsersFromDatabase(usersFilter, nil, usersChannel)
+
+	res := <- usersChannel
+
+	if len(res) != len(*idArray) {
+		http.Error(w, "not all users in add/remove list found", http.StatusNotFound)
+		return
+	}
+
+	addChan := make(chan *database.UpdateResponse)
+	go updateACLAdd(*hex, uid, acl.Add, addChan)
+	responseAdd := <-addChan
+
+	if responseAdd.Matched == 0 {
+		http.Error(w, "image not found", http.StatusNotFound)
+		return
+	}
+
+	if responseAdd.Err != nil {
+		log.Println(responseAdd.Err)
+		common.SendInternalServerError(w)
+		return
+	}
+
+	rmChan := make(chan *database.UpdateResponse)
+	go updateACLRemove(*hex, uid, acl.Remove, rmChan)
+	responseRemove := <-rmChan
+
+	if responseRemove.Err != nil {
+		log.Println(responseRemove.Err)
+		common.SendInternalServerError(w)
+		return
+	}
+
+	if responseAdd.Modified == 0 && responseRemove.Modified == 0{
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
+
+
 
 /**
 [PUT]
@@ -356,7 +471,7 @@ func deleteImage(w http.ResponseWriter, r *http.Request) {
 	res := <-channel
 
 	if res.Err != nil {
-		routes.SendInternalServerError(w)
+		common.SendInternalServerError(w)
 		return
 	}
 
@@ -369,26 +484,11 @@ func deleteImage(w http.ResponseWriter, r *http.Request) {
 		Bucket: aws.String(bucketName),
 		Key: aws.String(hex.Hex()),
 	}); err != nil {
-		routes.SendInternalServerError(w)
+		common.SendInternalServerError(w)
 		return
 	}
 
-	w.WriteHeader(200)
-}
-
-/**
-[DELETE]
-Deletes all images posted by this user.
-
-Query parameters:
-	- id: the image ID.
-
-Returns
-	- 200: Images deleted successfully. Will return the number of images deleted.
-	- 403: User does not have permission to delete image.
-*/
-func deleteAllImages(w http.ResponseWriter, r *http.Request) {
-
+	w.WriteHeader(http.StatusOK)
 }
 
 /**
@@ -438,7 +538,7 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 	res := <-channel
 
 	if res.err != nil {
-		routes.SendInternalServerError(w)
+		common.SendInternalServerError(w)
 		return
 	}
 
@@ -451,7 +551,7 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		log.Println(err)
-		routes.SendInternalServerError(w)
+		common.SendInternalServerError(w)
 		return
 	}
 
@@ -467,7 +567,7 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Image not found", http.StatusNotFound)
 		} else {
 			log.Println(dlErr)
-			routes.SendInternalServerError(w)
+			common.SendInternalServerError(w)
 		}
 		return
 	}
@@ -476,12 +576,12 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 
 	if fileErr != nil {
 		log.Println(fileErr)
-		routes.SendInternalServerError(w)
+		common.SendInternalServerError(w)
 		return
 	}
 
 	w.Header().Add("Content-Type", http.DetectContentType(fileContent))
-	w.WriteHeader(200)
+	w.WriteHeader(http.StatusOK)
 	w.Write(fileContent)
 }
 
@@ -515,7 +615,7 @@ func getImagesMetadata(w http.ResponseWriter, r *http.Request) {
 	res := <-channel
 
 	if res.err != nil {
-		routes.SendInternalServerError(w)
+		common.SendInternalServerError(w)
 		return
 	}
 
@@ -524,7 +624,7 @@ func getImagesMetadata(w http.ResponseWriter, r *http.Request) {
 	marshalled, _ := json.Marshal(res.images)
 
 	w.Header().Add("Content-Type", "application/json")
-	w.WriteHeader(200)
+	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(marshalled)
 }
 
@@ -544,16 +644,15 @@ func ServeImageRoutes(r *mux.Router) {
 	r.HandleFunc("/getImage", getImage).Methods("GET")
 	r.HandleFunc("/getImagesMetadata", getImagesMetadata).Methods("GET")
 
-	s := r.Methods("PUT", "DELETE", "PATCH").Subrouter()
+	s := r.Methods("DELETE", "PATCH", "POST").Subrouter()
 
 	s.Use(middleware.JWTMiddleware)
 
-	s.HandleFunc("/addImage", addNewImage).Methods("PUT")
-	s.HandleFunc("/deleteImageFromDatabase", deleteImage).Methods("DELETE")
+	s.HandleFunc("/addImage", addNewImage).Methods("POST")
+	s.HandleFunc("/deleteImage", deleteImage).Methods("DELETE")
 	s.HandleFunc("/editImageACL", editImageACL).Methods("PATCH")
-	s.HandleFunc("/likeImage", likeImage).Methods("PUT")
+	s.HandleFunc("/likeImage", likeImage).Methods("PATCH")
 	s.HandleFunc("/unlikeImage", unlikeImage).Methods("DELETE")
-	s.HandleFunc("/deleteAllImages", deleteAllImages).Methods("DELETE")
 }
 
 

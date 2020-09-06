@@ -9,6 +9,28 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+func updateACLAdd(imageid primitive.ObjectID, userid string, add []string, channel chan *database.UpdateResponse) {
+	filter := bson.D{{"$and", []bson.D{
+		{{"_id", imageid}},
+		{{"authorid", userid}},
+	}}}
+
+	update := bson.D{{"$addToSet", bson.D{{"accessListIDs", bson.D{{"$each", add}}}}}}
+
+	channel <- database.Update("images", filter, update, nil)
+}
+
+func updateACLRemove(imageid primitive.ObjectID, userid string, remove []string, channel chan *database.UpdateResponse) {
+	filter := bson.D{{"$and", []bson.D{
+		{{"_id", imageid}},
+		{{"authorid", userid}},
+	}}}
+
+	update := bson.D{ {"$pullAll", bson.D{{"accessListIDs", remove}}}}
+
+	channel <- database.Update("images", filter, update, nil)
+}
+
 func deleteAllImagesFromDatabase(userid string, channel chan *database.DeleteResponse) {
 	filter := bson.D{{"authorid", userid}}
 

@@ -5,7 +5,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/kilowatt-/ImageRepository/database"
 	"github.com/kilowatt-/ImageRepository/model"
-	"github.com/kilowatt-/ImageRepository/routes"
+	"github.com/kilowatt-/ImageRepository/routes/common"
 	"github.com/kilowatt-/ImageRepository/routes/middleware"
 	"go.mongodb.org/mongo-driver/bson"
 	"golang.org/x/crypto/bcrypt"
@@ -82,7 +82,7 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 		if err.Error() == InvalidHex {
 			http.Error(w, "invalid ID passeed in", http.StatusBadRequest)
 		} else {
-			routes.SendInternalServerError(w)
+			common.SendInternalServerError(w)
 		}
 		return
 	}
@@ -97,7 +97,7 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 
 	if len(res) == 1 && res[0].Err != nil {
 		log.Println(res[0].Err)
-		routes.SendInternalServerError(w)
+		common.SendInternalServerError(w)
 		return
 	}
 
@@ -109,7 +109,7 @@ func getUsers(w http.ResponseWriter, r *http.Request) {
 
 	jsonResponse, _ := json.Marshal(users)
 	w.Header().Add("Content-Type", "application/json")
-	w.WriteHeader(200)
+	w.WriteHeader(http.StatusOK)
 	w.Write(jsonResponse)
 }
 
@@ -166,7 +166,7 @@ func handleSignUp(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Email "+email+" already registered", http.StatusConflict)
 			}
 		} else {
-			routes.SendInternalServerError(w)
+			common.SendInternalServerError(w)
 		}
 
 	} else {
@@ -209,21 +209,21 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 			if res.Err.Error() == UserNotFound || res.Err.Error() == PasswordNotMatching {
 				http.Error(w, "Provided email/password do not match", http.StatusNotFound)
 			} else {
-				routes.SendInternalServerError(w)
+				common.SendInternalServerError(w)
 			}
 		} else {
 			token, expiry, jwtErr := middleware.CreateLoginToken(res.User)
 
 			if jwtErr != nil {
 				log.Println(jwtErr)
-				routes.SendInternalServerError(w)
+				common.SendInternalServerError(w)
 			} else {
 				res.User.Password = nil
 				jsonResponse, jsonErr := json.Marshal(res.User)
 
 				if jsonErr != nil {
 					log.Println(jsonErr)
-					routes.SendInternalServerError(w)
+					common.SendInternalServerError(w)
 				} else {
 
 					jsonEncodedCookie := strings.ReplaceAll(string(jsonResponse), "\"", "'") // Have to do this to Set-Cookie in psuedo-JSON format.
@@ -250,7 +250,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 						SameSite:   0,
 					})
 
-					w.WriteHeader(200)
+					w.WriteHeader(http.StatusOK)
 					w.Write(jsonResponse)
 				}
 			}
