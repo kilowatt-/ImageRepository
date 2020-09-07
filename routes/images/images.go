@@ -230,6 +230,11 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 		accessListIDs = []string{}
 	}
 
+	if accessLevel != "public" && accessLevel != "private" {
+		log.Println("invalid access level passed in; defaulting to public")
+		accessLevel = "public"
+	}
+
 	image := model.Image{
 		AuthorID:      authorID,
 		AccessLevel:   accessLevel,
@@ -262,6 +267,8 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	insertResponse.Err = nil
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	jsonResponse, _ := json.Marshal(insertResponse)
 	_, _ = w.Write(jsonResponse)
@@ -307,7 +314,7 @@ type acl struct {
 }
 
 /**
-	[PUT]
+	[PATCH]
 
 	Adds the selected user IDs to the image's access control list (ACL)
 
@@ -425,7 +432,7 @@ func likeImage(w http.ResponseWriter, r *http.Request) {
 /**
 [DELETE]
 
-Removes this user from the image's unlike list.
+Removes this user from the image's like list.
 
 Query parameters:
 	- _id: the image ID.
@@ -445,7 +452,7 @@ func unlikeImage(w http.ResponseWriter, r *http.Request) {
 
 Deletes the given image.
 
-Query parameters:
+JSON body parameters:
 	- id: the image ID.
 
 Returns
@@ -493,7 +500,7 @@ func deleteImage(w http.ResponseWriter, r *http.Request) {
 
 /**
 [GET]
-Gets image by ID, and if user is authorized to see it.
+Gets image by ID, if it is visible to the user.
 
 Accepted query parameters:
 	- id: Image ID.

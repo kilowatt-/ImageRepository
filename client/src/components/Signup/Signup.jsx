@@ -21,8 +21,6 @@ import Cookies from "universal-cookie";
 import {getUserFromCookie} from "../../utils/getUserFromCookie";
 
 
-
-
 // Template from: https://github.com/mui-org/material-ui/blob/master/docs/src/pages/getting-started/templates/sign-up/SignUp.js
 const useStyles = makeStyles((theme) => ({
     paper: {
