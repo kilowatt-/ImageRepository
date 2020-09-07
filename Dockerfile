@@ -19,6 +19,6 @@ COPY --from=builder /server .
 COPY --from=node_builder . /client
 RUN chmod +x ./app
 
-ENV PORT 25000
+ENV GO_PORT 25000
 
 CMD "./app"
