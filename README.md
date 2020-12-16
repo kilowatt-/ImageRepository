@@ -1,7 +1,5 @@
 
 # Image Repository (Outstagram) [WIP]
-Deployed link: http://ec2-18-237-56-91.us-west-2.compute.amazonaws.com/ (no HTTPS yet!)
-
 A simple image repository backend project built in Golang and React. This was my first time writing an application in Go and with Docker, and it was a great experience :)
 
 Name is a pun on Instagram.
@@ -45,8 +43,6 @@ Endpoint structure:
 
 **Accepts**: `application/x-www-form-urlencoded`
 
-**API route**: http://ec2-18-237-56-91.us-west-2.compute.amazonaws.com/api/users/signup
-
 Handles sign up. Takes in a name, email, userHandle and password, verifies the inputs, and creates the user.
 
 Passwords are subject to complexity requirements of:
@@ -73,8 +69,6 @@ ___
 #### [POST] /login
 **Accepts**: `application/x-www-form-urlencoded`
 
-**API route**: http://ec2-18-237-56-91.us-west-2.compute.amazonaws.com/api/users/login
-
 Handles a login request.
 
 ##### Form fields:
@@ -87,7 +81,6 @@ Handles a login request.
 - `500`: If there is an internal server error.
 ___
 #### [GET] /getUsers
-**API route**: http://ec2-18-237-56-91.us-west-2.compute.amazonaws.com/api/users/getUsers
 
 Gets users that match the query (from querystring). An empty query will return the first 100 users.
 
@@ -113,7 +106,6 @@ Can be used to search for users based on the given criteria.
 ### /images endpoints
 
 #### [GET] /getImage
-**API route**: http://ec2-18-237-56-91.us-west-2.compute.amazonaws.com/api/images/getImage
 
 Gets image by ID, if it is visible to the user.
 
@@ -127,7 +119,6 @@ Returns: `(image/*)`
 ___
 
 #### [GET] /getImageMetadata
-**API route**: http://ec2-18-237-56-91.us-west-2.compute.amazonaws.com/api/images/getImagesMetadata
 
 Gets the metadata (not the actual image files) of the images in the database based on the queries passed in, in chronologically descending order.
 
@@ -169,8 +160,6 @@ ___
 #### [DELETE] /deleteImage
 **Accepts**: `application/json`
 
-**API route**:  http://ec2-18-237-56-91.us-west-2.compute.amazonaws.com/api/images/deleteImage
-
 Deletes the given image.
 
 JSON body parameters:
@@ -186,8 +175,6 @@ ___
 
 #### [PATCH] /editImageACL
 **Accepts**: `application/json`
-
-**API route**:  http://ec2-18-237-56-91.us-west-2.compute.amazonaws.com/api/images/editImageACL
 
 Adds the selected user IDs to the image's access control list (ACL)
 
@@ -208,8 +195,6 @@ Returns:
 #### [PATCH] /likeImage
 **Accepts**: `application/json`
 
-**API route**:  http://ec2-18-237-56-91.us-west-2.compute.amazonaws.com/api/images/likeImage
-
 Adds this user to the image's like list.
 
 JSON body parameters:
@@ -224,8 +209,6 @@ ___
 
 #### [DELETE] /unlikeImage
 **Accepts**: `application/json`
-
-**API route**:  http://ec2-18-237-56-91.us-west-2.compute.amazonaws.com/api/images/unlikeImage
 
 Removes this user from the image's like list.
 
