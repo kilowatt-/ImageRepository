@@ -12,6 +12,4 @@ RUN apk --no-cache add ca-certificates
 COPY --from=builder /server .
 RUN chmod +x ./app
 
-ENV GO_PORT 25000
-
 CMD "./app"
