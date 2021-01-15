@@ -1,32 +1,25 @@
 
-# Image Repository (Outstagram) [WIP]
+# Image Repository (backend)
 A simple image repository backend project built in Golang and React. This was my first time writing an application in Go and with Docker, and it was a great experience :)
 
 Name is a pun on Instagram.
 
-Front-end is a work in progress.
-
 ## Basic app architecture
 
-This app has a Golang backend, with a React frontend. The Golang backend processes all API requests; it connects to a MongoDB database that stores user and image metadata.
+This app has a Golang backend that will processes all API requests; it connects to a MongoDB database that stores user and image metadata.
 
-The images are stored as static files in an Amazon S3 bucket, and the app is built in a Docker container run on AWS EC2.
+The images are stored as static files in an Amazon S3 bucket, and the app is built in a Docker container.
 
 Authentication is handled via JWTs issued by the server.
 
-## What works on the front-end
-
-You can currently perform the following operations on the front end:
-- Sign up
-- Log in
-- Upload an image (with caption)
-
-### WIP:
-- Display images
-- Ability to modify the access control list (ACL) when uploading images
-- Ability to modify the access control list(ACL) after uploading images
-- Ability to delete images
-- Ability to like/unlike images
+## Setup
+1. Clone the repository.
+2. Fill out the variables as required in `.env.example`. You will need the following:
+- MongoDB instance (I use Atlas)
+- AWS S3 keys
+- A key to generate your JWTs
+3. Run the `Dockerfile`.
+4. Done! You should be able to run the backend server.
 
 ## API information
 Endpoint structure:
@@ -37,7 +30,6 @@ Endpoint structure:
 ## List of endpoints
 
 ### /users endpoints
-
 
 #### [POST] /signup
 

@@ -49,7 +49,7 @@ func main() {
 		_ = os.Setenv("AWS_REGION", "us-west-2")
 	}
 
-	corsOrigins, corsExists := os.LookupEnv("ALLOWED_CORS_ORIGINS");
+	corsOrigins, corsExists := os.LookupEnv("ALLOWED_CORS_ORIGINS")
 
 	if !corsExists {
 		log.Println("You are initializing the server without any allowed CORS origins. CORS requests will not work!")
