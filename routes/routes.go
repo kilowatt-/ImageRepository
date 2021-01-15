@@ -8,15 +8,19 @@ import (
 )
 
 func serveCatchAllAPIRoutes(r *mux.Router) {
-	r.PathPrefix("/api").HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+	r.PathPrefix("/").HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
 		http.Error(w, "Route not found", http.StatusNotFound)
 	})
 }
 
 
 func RegisterRoutes(r *mux.Router) {
-	users.ServeUserRoutes(r.PathPrefix("/api/users").Subrouter())
-	images.ServeImageRoutes(r.PathPrefix("/api/images").Subrouter())
+	users.ServeUserRoutes(r.PathPrefix("/users").Subrouter())
+	images.ServeImageRoutes(r.PathPrefix("/images").Subrouter())
+	r.HandleFunc("/", func(w http.ResponseWriter, request *http.Request) {
+		w.WriteHeader(200);
+		w.Write([]byte("Welcome to Outstagram API"));
+	})
 	serveCatchAllAPIRoutes(r)
 }
 
