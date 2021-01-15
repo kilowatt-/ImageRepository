@@ -1,0 +1,6 @@
+setup:
+  config:
+    PRODUCTION: true
+build:
+  docker:
+    web: Dockerfile
