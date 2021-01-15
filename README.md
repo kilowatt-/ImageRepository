@@ -15,9 +15,9 @@ Authentication is handled via JWTs issued by the server.
 ## Setup
 1. Clone the repository.
 2. Fill out the variables as required in `.env.example`. You will need the following:
-- MongoDB instance (I use Atlas)
-- AWS S3 keys
-- A key to generate your JWTs
+    - MongoDB instance (I use Atlas)
+    - AWS S3 keys
+    - A key to generate your JWTs
 3. Run the `Dockerfile`.
 4. Done! You should be able to run the backend server.
 
