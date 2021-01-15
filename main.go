@@ -55,7 +55,7 @@ func main() {
 		log.Println("You are initializing the server without any allowed CORS origins. CORS requests will not work!")
 	}
 
-	PORT, portExists := os.LookupEnv("GO_PORT")
+	PORT, portExists := os.LookupEnv("PORT")
 
 	if !portExists {
 		PORT = DEFAULTPORT
