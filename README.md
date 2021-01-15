@@ -81,7 +81,7 @@ Can be used to search for users based on the given criteria.
 
 ##### Accepted query parameters:
 - `id`: {comma separated hex strings} A list of user IDs. Will ignore all queries except ascending and orderBy if this is present.
-- `name`: {comma separated hex strings} A list of names. Non-exact, case-insensitive match by default.
+- `name`: {comma separated strings} A list of names. Non-exact, case-insensitive match by default.
 - `nameExact`: {Y/y} A flag that sets whether the database query should match the names exactly. Set this flag to Y/y only if you want to get exact matches
 - `userHandle`: {comma separated strings} A list of user handles. Non-exact, case-insensitive match by default.
 - `userHandleExact`: {Y/y} A flag that sets whether the query should match the userHandles exactly or not. Set this flag to Y/y only if you want to get exact matches
