@@ -30,6 +30,16 @@ func buildUserQueryAndOptions(r *http.Request) (*bson.D, *options.FindOptions, e
 	lt := ""
 	gt := ""
 
+	opts := &options.FindOptions{Limit: &limit}
+
+	if orderByQuery, ok := r.URL.Query()["orderBy"]; ok && len(orderByQuery) > 0 && len(orderByQuery[0]) > 0 {
+		nameAsOrder = orderByQuery[0] == "name"
+	}
+
+	if ascQuery, ok := r.URL.Query()["ascending"]; ok && len(ascQuery) > 0 && len(ascQuery[0]) > 0 && (ascQuery[0] == "Y" || ascQuery[0] == "y") {
+		direction = 1
+	}
+
 	if idQuery, ok := r.URL.Query()["id"]; ok && len(idQuery) > 0 && len(idQuery[0]) > 0 {
 		idStrs := strings.Split(idQuery[0], ",")
 
@@ -49,16 +59,6 @@ func buildUserQueryAndOptions(r *http.Request) (*bson.D, *options.FindOptions, e
 			limit = int64(math.Min(float64(parseLimit), float64(limit)))
 		}
 	}
-
-	if orderByQuery, ok := r.URL.Query()["orderBy"]; ok && len(orderByQuery) > 0 && len(orderByQuery[0]) > 0 {
-		nameAsOrder = orderByQuery[0] == "name"
-	}
-
-	if ascQuery, ok := r.URL.Query()["ascending"]; ok && len(ascQuery) > 0 && len(ascQuery[0]) > 0 && (ascQuery[0] == "Y" || ascQuery[0] == "y") {
-		direction = 1
-	}
-
-	opts := &options.FindOptions{Limit: &limit}
 
 	if nameAsOrder {
 		opts.SetSort(bson.D{{"name", direction}, {"userHandle", direction}})
