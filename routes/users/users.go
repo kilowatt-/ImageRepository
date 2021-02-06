@@ -11,6 +11,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 )
@@ -229,13 +230,15 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 					jsonEncodedCookie := strings.ReplaceAll(string(jsonResponse), "\"", "'") // Have to do this to Set-Cookie in psuedo-JSON format.
 
+					_, inProduction := os.LookupEnv("PRODUCTION")
+
 					http.SetCookie(w, &http.Cookie{
 						Name:       "token",
 						Value:      token,
 						Path:       "/",
 						Expires:    expiry,
 						RawExpires: expiry.String(),
-						Secure:     false,
+						Secure:     inProduction,
 						HttpOnly:   true,
 						SameSite:   0,
 					})
