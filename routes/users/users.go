@@ -135,6 +135,7 @@ func handleSignUp(w http.ResponseWriter, r *http.Request) {
 
 	if !verifyUserHandle(userHandle) {
 		http.Error(w, "Invalid userHandle", http.StatusBadRequest)
+		return
 	}
 
 	if !verifyEmail(email) {
