@@ -128,9 +128,6 @@ ___
 
 #### [POST] /addImage
 **Accepts**: `form/multipart`
-
-**API route**:  http://ec2-18-237-56-91.us-west-2.compute.amazonaws.com/api/images/addImage
-
 **Returns**: `application/json`
 
 Inserts a new image record to the database, and uploads the file to our S3 bucket.
