@@ -1,7 +1,7 @@
 Deployed link: https://outstagram-be.herokuapp.com
 
 # Image Repository (backend)
-A simple image repository backend project built in Golang and React. This was my first time writing an application in Go and with Docker, and it was a great experience :)
+A simple image repository backend project built in Golang. This was my first time writing an application in Go and with Docker, and it was a great experience :)
 
 Name is a pun on Instagram.
 
