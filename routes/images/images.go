@@ -221,6 +221,8 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 	accessListIDsString := r.FormValue("accessListIDs")
 	caption := r.FormValue("caption")
 
+	log.Println(authorID)
+
 	var accessListIDs []string
 
 	jsonParseErr := json.Unmarshal([]byte(accessListIDsString), &accessListIDs)
@@ -259,7 +261,7 @@ func addNewImage(w http.ResponseWriter, r *http.Request) {
 	_, uploadErr := s3Uploader.Upload(&s3manager.UploadInput{
 		Bucket: aws.String(bucketName),
 		Key:    aws.String(id),
-		Body:   file,
+		Body:   buf,
 	})
 
 	if uploadErr != nil {
