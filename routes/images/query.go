@@ -22,8 +22,10 @@ func buildImageQuery(r *http.Request) (*bson.D, int64, error) {
 	after := time.Time{}
 	var limit int64 = 10
 	user := []string{}
-
 	ids := []primitive.ObjectID{}
+
+	var subFilters []interface{}
+
 
 	if idQuery, ok := r.URL.Query()["id"]; ok && len(idQuery) > 0 && len(idQuery[0]) > 0 {
 		idStrs := strings.Split(idQuery[0], ",")
@@ -32,40 +34,36 @@ func buildImageQuery(r *http.Request) (*bson.D, int64, error) {
 			hex, err := primitive.ObjectIDFromHex(k)
 
 			if err != nil {
-				return nil, limit, errors.New("invalid image ID passed in")
+				return nil, limit, errors.New("invalid image ID passed in: " + k)
 			}
 
 			ids = append(ids, hex)
 		}
 	}
 
-
-
-	if beforeQuery, beforeOK := r.URL.Query()["before"]; beforeOK && len(beforeQuery) > 0 && len(beforeQuery[0]) > 0 {
-		if conv, convErr := strconv.ParseInt(beforeQuery[0], 10, 64); convErr == nil {
-			before = time.Unix(conv, 0)
-		}
-	}
-	if afterQuery, afterOK := r.URL.Query()["after"]; afterOK && len(afterQuery) > 0 && len(afterQuery[0]) > 0 {
-		if conv, convErr := strconv.ParseInt(afterQuery[0], 10, 64); convErr == nil {
-			after = time.Unix(conv, 0)
-		}
-	}
-	if limitQuery, limitOK := r.URL.Query()["limit"]; limitOK && len(limitQuery) > 0 && len(limitQuery[0]) > 0 {
-		if conv, convErr := strconv.ParseInt(limitQuery[0], 10, 64); convErr == nil {
-			limit = conv
-		}
-	}
-	if userQuery, userOK := r.URL.Query()["user"]; userOK && len(userQuery) > 0 && len(userQuery[0]) > 0 {
-		user = strings.Split(userQuery[0], ",")
-	}
-
-	var subFilters []interface{}
-
 	if len(ids) > 0 {
 		limit = int64(len(ids))
 		subFilters = append(subFilters, &bson.D{{"_id", bson.D{{"$in", ids}}}})
 	} else {
+		if beforeQuery, beforeOK := r.URL.Query()["before"]; beforeOK && len(beforeQuery) > 0 && len(beforeQuery[0]) > 0 {
+			if conv, convErr := strconv.ParseInt(beforeQuery[0], 10, 64); convErr == nil {
+				before = time.Unix(conv, 0)
+			}
+		}
+		if afterQuery, afterOK := r.URL.Query()["after"]; afterOK && len(afterQuery) > 0 && len(afterQuery[0]) > 0 {
+			if conv, convErr := strconv.ParseInt(afterQuery[0], 10, 64); convErr == nil {
+				after = time.Unix(conv, 0)
+			}
+		}
+		if limitQuery, limitOK := r.URL.Query()["limit"]; limitOK && len(limitQuery) > 0 && len(limitQuery[0]) > 0 {
+			if conv, convErr := strconv.ParseInt(limitQuery[0], 10, 64); convErr == nil {
+				limit = conv
+			}
+		}
+		if userQuery, userOK := r.URL.Query()["user"]; userOK && len(userQuery) > 0 && len(userQuery[0]) > 0 {
+			user = strings.Split(userQuery[0], ",")
+		}
+
 		if !before.IsZero() {
 			subFilters = append(subFilters, bson.D{{"uploadDateTime", bson.D{{"$lt", primitive.NewDateTimeFromTime(before)}}}})
 		}
