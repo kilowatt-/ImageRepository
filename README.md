@@ -111,7 +111,7 @@ Returns: `(image/*)`
 - `404`: If image is not found, or user is not authorised to view this image. (there is no difference).
 ___
 
-#### [GET] /getImageMetadata
+#### [GET] /getImagesMetadata
 
 Gets the metadata (not the actual image files) of the images in the database based on the queries passed in, in chronologically descending order.
 
