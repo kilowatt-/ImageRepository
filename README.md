@@ -155,7 +155,7 @@ ___
 Deletes the given image.
 
 JSON body parameters:
-- `id`: the image ID.
+- `_id`: the image ID.
 
 Returns
 - `200`: Image deleted successfully.
