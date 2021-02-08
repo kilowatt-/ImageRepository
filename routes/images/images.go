@@ -604,37 +604,41 @@ func getImage(w http.ResponseWriter, r *http.Request) {
 		- after: UNIX time stamp repesenting the earliest image that should be fetched.
 		- limit: integer. the limit on the number of images to fetch. Default 10 if not specified.
 		- user: comma-separated string. Gets images from particular user(s).
+		- id: comma-separated string. Image ID(s). All other parameters are ignored if this is possed in.
 
 	Returns: (application/json)
 		- 200: With list of images that match search criteria.
+		- 400: If an invalid hex ID was passed in.
 		- 500: Internal server error.
 */
 func getImagesMetadata(w http.ResponseWriter, r *http.Request) {
-	filter, limit := buildImageQuery(r)
+	if filter, limit, hexErr := buildImageQuery(r); hexErr != nil {
+		http.Error(w, hexErr.Error(), http.StatusBadRequest)
+	} else {
+		opts := &options.FindOptions{
+			Limit: &limit,
+			Sort:  bson.D{{"uploadDateTime", -1}},
+		}
 
-	opts := &options.FindOptions{
-		Limit: &limit,
-		Sort:  bson.D{{"uploadDateTime", -1}},
+		channel := make(chan imageDatabaseResponse)
+
+		go getImagesMetadataFromDatabase(*filter, opts, channel)
+
+		res := <-channel
+
+		if res.err != nil {
+			common.SendInternalServerError(w)
+			return
+		}
+
+		appendAuthorsToImages(res.images, *res.userIDMap)
+
+		marshalled, _ := json.Marshal(res.images)
+
+		w.Header().Add("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(marshalled)
 	}
-
-	channel := make(chan imageDatabaseResponse)
-
-	go getImagesMetadataFromDatabase(*filter, opts, channel)
-
-	res := <-channel
-
-	if res.err != nil {
-		common.SendInternalServerError(w)
-		return
-	}
-
-	appendAuthorsToImages(res.images, *res.userIDMap)
-
-	marshalled, _ := json.Marshal(res.images)
-
-	w.Header().Add("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(marshalled)
 }
 
 /**
