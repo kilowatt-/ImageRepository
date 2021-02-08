@@ -120,9 +120,11 @@ Accepted query parameters:
 - `after`: UNIX time stamp repesenting the earliest image that should be fetched.
 - `limit`: integer. the limit on the number of images to fetch. Default 10 if not specified.
 - `user`: comma-separated string. Gets images from particular user(s).
+- `id`: comma-separated string. Gets image by IDs. All other query fields are ignored if this is passed in.
 
 Returns: (application/json)
 - `200`: With list of images that match search criteria.
+- `400`: If an invalid hex ID was passed in.
 - `500`: Internal server error.
 ___
 
